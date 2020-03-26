@@ -23,7 +23,7 @@ Makefile
 \.DS_Store
 Testing
 /.cache
-/.ipynb_checkpoints
+.ipynb_checkpoints/
 /.pytest_cache
 librender_ptx.h
 librender_ptx.cpp
