@@ -464,7 +464,7 @@ endif()
 # Get the current working branch
 execute_process(
   COMMAND git rev-parse --abbrev-ref HEAD
-  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
   OUTPUT_VARIABLE GIT_BRANCH
   OUTPUT_STRIP_TRAILING_WHITESPACE
 )
@@ -472,7 +472,7 @@ execute_process(
 # Get the latest abbreviated commit hash of the working branch
 execute_process(
   COMMAND git log -1 --format=%h
-  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
   OUTPUT_VARIABLE GIT_COMMIT_HASH
   OUTPUT_STRIP_TRAILING_WHITESPACE
 )
@@ -560,9 +560,9 @@ macro (add_file DST SRC)
   list(APPEND MITSUBA_DIST_OUT ${OUTPUT_FILE})
 endmacro()
 
-add_file(data/srgb.coeff ${CMAKE_BINARY_DIR}/ext_build/rgb2spec/srgb.coeff rgb2spec_opt_run)
+add_file(data/srgb.coeff ${PROJECT_BINARY_DIR}/ext_build/rgb2spec/srgb.coeff rgb2spec_opt_run)
 
-file(COPY resources/data/ior DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/dist/data)
+file(COPY resources/data/ior DESTINATION ${CMAKE_BINARY_DIR}/dist/data)
 
 add_custom_target(dist-copy ALL DEPENDS ${MITSUBA_DIST_OUT})
 set_property(TARGET dist-copy PROPERTY FOLDER misc)

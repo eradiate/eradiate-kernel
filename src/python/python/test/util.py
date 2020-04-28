@@ -29,17 +29,24 @@ def fresolver_append_path(func):
     # Source: https://stackoverflow.com/a/24439444/3792942
     caller = getframeinfo(stack()[1][0])
     caller_path = par(caller.filename)
+    print(caller_path)
+
+    # If the MITSUBA_DIR environment variable is set, use it as the project root 
+    # directory
+    root_path = os.getenv("MITSUBA_DIR")
 
     # Heuristic to find the project's root directory
-    def is_root(path):
-        if not path:
-            return False
-        children = os.listdir(path)
-        return ('ext' in children) and ('include' in children) \
-               and ('src' in children) and ('resources' in children)
-    root_path = caller_path
-    while not is_root(root_path) and (par(root_path) != root_path):
-        root_path = par(root_path)
+    if not root_path:
+        def is_root(path):
+            if not path:
+                return False
+            children = os.listdir(path)
+            return ('ext' in children) and ('include' in children) \
+                and ('src' in children) and ('resources' in children)
+        root_path = caller_path
+        while not is_root(root_path) and (par(root_path) != root_path):
+            print(root_path)
+            root_path = par(root_path)
 
 
     # The @wraps decorator properly sets __name__ and other properties, so that
