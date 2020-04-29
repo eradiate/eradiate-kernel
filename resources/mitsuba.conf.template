@@ -69,6 +69,10 @@
     # 'spectrum' C++ types.
 
     "enabled": [
+        "scalar_mono",
+        "scalar_mono_double",
+        "scalar_mono_polarized",
+        # "scalar_mono_polarized_double",
         # The "scalar_rgb" variant *must* be included at the moment.
         "scalar_rgb",
         "scalar_spectral"
@@ -77,13 +81,13 @@
     # If mitsuba is launched without any specific mode parameter,
     # the configuration below will be used by default
 
-    "default": "scalar_spectral",
+    "default": "scalar_mono",
 
     # The variant below will automatically be set when importing the Python
     # mitsuba module. If the value is "", the desired variant will need to be
     # specified using "mitsuba.set_variant(..)" before importing any packages.
 
-    "python-default": "",
+    "python-default": "scalar_mono",
 
     # -------------------------------------------------------------
     # The remainder of this file defines the variants and does not
