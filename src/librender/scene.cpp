@@ -96,6 +96,10 @@ MTS_VARIANT Scene<Float, Spectrum>::Scene(const Properties &props) {
     // Create emitters' shapes (environment luminaires)
     for (Emitter *emitter: m_emitters)
         emitter->set_scene(this);
+
+    // Create sensors' shapes (environment sensors)
+    for (Sensor *sensor: m_sensors)
+        sensor->set_scene(this);
 }
 
 MTS_VARIANT Scene<Float, Spectrum>::~Scene() {
