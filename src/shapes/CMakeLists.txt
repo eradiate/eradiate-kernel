@@ -4,6 +4,7 @@ add_plugin(obj         obj.cpp)
 add_plugin(ply         ply.cpp)
 add_plugin(serialized  serialized.cpp)
 
+add_plugin(cube        cube.cpp)
 add_plugin(cylinder    cylinder.cpp)
 add_plugin(disk        disk.cpp)
 add_plugin(rectangle   rectangle.cpp)
