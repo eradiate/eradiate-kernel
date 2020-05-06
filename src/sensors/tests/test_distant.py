@@ -1,7 +1,8 @@
-import enoki as ek
 import numpy as np
-import mitsuba
 import pytest
+
+import enoki as ek
+import mitsuba
 
 
 def xml_sensor(direction=None, target=None, xpixel=1):
@@ -71,27 +72,40 @@ def test_construct(variant_scalar_rgb):
     )
 
 
-@pytest.mark.parametrize("direction", [[0.0, 0.0, 1.0], [-1.0, -1.0, 0.0], [2.0, 0.0, 0.0]])
-@pytest.mark.parametrize("target", [None, [0.0, 0.0, 0.0], [4.0, 1.0, 0.0]])
-def test_sample_ray(variant_scalar_rgb, direction, target):
-    sample1 = [0.32, 0.87]
-    sample2 = [0.16, 0.44]
+@pytest.mark.parametrize("sample1, sample2", [
+    [[0.32, 0.87], [0.16, 0.44]],
+    [[0.17, 0.44], [0.22, 0.81]],
+    [[0.12, 0.82], [0.99, 0.42]],
+    [[0.72, 0.40], [0.01, 0.61]],
+])
+@pytest.mark.parametrize("target", [
+    None,
+    [0.0, 0.0, 0.0],
+    [4.0, 1.0, 0.0],
+    [1.0, 1.0, 0.0],
+    [0.5, -0.3, 0.0],
+
+])
+@pytest.mark.parametrize("direction", [
+    [0.0, 0.0, 1.0],
+    [-1.0, -1.0, 0.0],
+    [2.0, 0.0, 0.0]
+])
+@pytest.mark.parametrize("ray_kind", ["regular", "differential"])
+def test_sample_ray(variant_scalar_rgb, sample1, sample2, direction, target, ray_kind):
     sensor = make_sensor(direction, target)
 
-    # Test regular ray sampling
-    ray, _ = sensor.sample_ray(1., 1., sample1, sample2, True)
+    if ray_kind == "regular":
+        ray, _ = sensor.sample_ray(1., 1., sample1, sample2, True)
+    elif ray_kind == "differential":
+        ray, _ = sensor.sample_ray_differential(1., 1., sample1, sample2, True)
+        assert not ray.has_differentials
+
+    # Check that ray direction is what is expected
     assert ek.allclose(ray.d, ek.normalize(direction))
 
     # Check that ray origin is outside of bounding sphere
     # Bounding sphere is centered at world origin and has radius 1 without scene
-    assert ek.norm(ray.o) >= 1.
-
-    # Test ray differential sampling
-    ray, _ = sensor.sample_ray_differential(1., 1., sample1, sample2, True)
-    assert ek.allclose(ray.d, ek.normalize(direction))
-    assert not ray.has_differentials
-
-    # Check that ray origin is outside of bounding sphere
     assert ek.norm(ray.o) >= 1.
 
 
@@ -126,9 +140,11 @@ def test_target(variant_scalar_rgb, target):
     assert ek.allclose(si.p, [target[0], target[1], 0.], atol=1e-6)
 
 
-def test_intersection():
-    # Check if the sensor correctly fires rays spread uniformly at the surface
-    scene = make_scene(direction=[0, 0, -1])
+@pytest.mark.parametrize("direction", [[0, 0, -1], [0.5, 0.5, -1]])
+def test_intersection(variant_scalar_rgb, direction):
+    # Check if the sensor correctly casts rays spread uniformly in the scene
+    direction = ek.normalize(direction)
+    scene = make_scene(direction=direction)
     sensor = scene.sensors()[0]
     sampler = sensor.sampler()
 
@@ -157,6 +173,8 @@ def test_intersection():
 
     # Check number of invalid intersections
     # We expect a ratio of invalid interactions equal to the square's area
-    # divided by the bounding sphere's cross section
+    # divided by the bounding sphere's cross section, weighted by the surface's
+    # slanting factor (cos theta) w.r.t the sensor's direction
     n_invalid = np.count_nonzero(np.isnan(isect).all(axis=1))
-    assert np.allclose(n_invalid / n_rays, 1. - 2. / np.pi, atol=1e-2)
+    assert np.allclose(n_invalid / n_rays, 1. - 2. / np.pi *
+                       ek.dot(direction, [0, 0, -1]), atol=1e-2)

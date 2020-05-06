@@ -20,7 +20,7 @@ Distant directional sensor (:monosp:`distant`)
 
  * - to_world
    - |transform|
-   - Emitter-to-world transformation matrix.
+   - Sensor-to-world transformation matrix.
  * - direction
    - |vector|
    - Alternative (and exclusive) to `to_world`. Direction from which the
@@ -28,21 +28,20 @@ Distant directional sensor (:monosp:`distant`)
  * - target
    - |point|
    - *Optional.* Point (in world coordinates) to which sampled rays will be
-     shot. Useful for one-dimensional scenes.
+     cast. Useful for one-dimensional scenes. If unset, rays will be cast
+     uniformly over the entire scene.
 
-This sensor plugin implements a distant directional sensor, which records
-radiation emitted in a fixed direction. If the ``target`` parameter is not set,
-the rays will be distributed over the :math:`Z=0`-plane of the global bounding
-box.
+This sensor plugin implements a distant directional sensor which records
+radiation leaving the scene in a given direction. If the ``target`` parameter
+is not set, rays cast by the sensor will be distributed uniformly on the cross
+section of the scene's bounding sphere.
 
 */
 
 MTS_VARIANT class DistantSensor final : public Sensor<Float, Spectrum> {
 public:
-    MTS_IMPORT_BASE(Sensor, m_world_transform, m_needs_sample_3, m_film,
-                    m_sampler, m_resolution, m_shutter_open,
-                    m_shutter_open_time, m_aspect)
-    MTS_IMPORT_TYPES(Scene, Texture)
+    MTS_IMPORT_BASE(Sensor, m_world_transform, m_needs_sample_3, m_film)
+    MTS_IMPORT_TYPES(Scene)
 
     DistantSensor(const Properties &props) : Base(props) {
         /* Until `set_scene` is called, we have no information
@@ -77,13 +76,15 @@ public:
             0.5f + math::RayEpsilon<Float>)
             Log(Warn, "This sensor should be used with a reconstruction filter "
                       "with a radius of 0.5 or lower (e.g. default box)");
+
+        m_needs_sample_3 = false;
     }
 
     void set_scene(const Scene *scene) override {
         m_bsphere = scene->bbox().bounding_sphere();
         m_bsphere.radius =
             max(math::RayEpsilon<Float>,
-                m_bsphere.radius * (1.f + math::RayEpsilon<Float>));
+                m_bsphere.radius * (1.f + math::RayEpsilon<Float>) );
     }
 
     std::pair<Ray3f, Spectrum> sample_ray(Float time, Float wavelength_sample,
@@ -107,10 +108,11 @@ public:
         if (!m_has_target) {
             // If no target point is defined, sample a target point on the
             // bounding sphere's cross section
-            Point2f p = warp::square_to_uniform_disk_concentric(spatial_sample);
-            Vector3f perp_offset = trafo.transform_affine(
-                Vector3f{ p.x(), p.y(), 0.f } * m_bsphere.radius);
-            ray.o = m_bsphere.center - ray.d * m_bsphere.radius + perp_offset;
+            Point2f offset =
+                warp::square_to_uniform_disk_concentric(spatial_sample);
+            Vector3f perp_offset =
+                trafo.transform_affine(Vector3f{ offset.x(), offset.y(), 0.f });
+            ray.o = m_bsphere.center + (perp_offset - ray.d) * m_bsphere.radius;
         } else {
             ray.o = m_target - 2. * ray.d * m_bsphere.radius;
         }
@@ -124,7 +126,7 @@ public:
 
     std::pair<RayDifferential3f, Spectrum> sample_ray_differential(
         Float time, Float wavelength_sample, const Point2f &spatial_sample,
-        const Point2f & /*aperture_sample*/, Mask active) const override {
+        const Point2f & /*direction_sample*/, Mask active) const override {
         MTS_MASKED_FUNCTION(ProfilerPhase::EndpointSampleRay, active);
         RayDifferential3f ray;
         ray.time = time;
@@ -142,10 +144,11 @@ public:
         if (!m_has_target) {
             // If no target point is defined, sample a target point on the
             // bounding sphere's cross section
-            Point2f p = warp::square_to_uniform_disk_concentric(spatial_sample);
-            Vector3f perp_offset = trafo.transform_affine(
-                Vector3f{ p.x(), p.y(), 0.f } * m_bsphere.radius);
-            ray.o = m_bsphere.center - ray.d * m_bsphere.radius + perp_offset;
+            Point2f offset =
+                warp::square_to_uniform_disk_concentric(spatial_sample);
+            Vector3f perp_offset =
+                trafo.transform_affine(Vector3f{ offset.x(), offset.y(), 0.f });
+            ray.o = m_bsphere.center + (perp_offset - ray.d) * m_bsphere.radius;
         } else {
             ray.o = m_target - 2. * ray.d * m_bsphere.radius;
         }
@@ -154,12 +157,14 @@ public:
         //    have differentials
         ray.has_differentials = false;
 
+        ray.update();
+
         return std::make_pair(
             ray, unpolarized<Spectrum>(weight) *
                      (4.f * sqr(math::Pi<Float> * m_bsphere.radius)));
     }
 
-    /// This emitter does not occupy any particular region of space, return an
+    /// This sensor does not occupy any particular region of space, return an
     /// invalid bounding box
     ScalarBoundingBox3f bbox() const override { return ScalarBoundingBox3f(); }
 
