@@ -130,6 +130,11 @@ public:
         callback->put_object("radiance", m_radiance.get());
     }
 
+    void parameters_changed(const std::vector<std::string> &keys) override {
+        if (string::contains(keys, "parent"))
+            m_area_times_pi = m_shape->surface_area() * math::Pi<ScalarFloat>;
+    }
+
     std::string to_string() const override {
         std::ostringstream oss;
         oss << "AreaLight[" << std::endl

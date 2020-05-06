@@ -312,7 +312,7 @@ public:
 
     void traverse(TraversalCallback *callback) override;
 
-    void parameters_changed() override;
+    void parameters_changed(const std::vector<std::string> &/*keys*/ = {}) override;
 
     //! @}
     // =============================================================
@@ -326,6 +326,8 @@ protected:
     inline Shape() { }
     virtual ~Shape();
 
+    /// Set this shape to its associated children
+    void set_children();
 protected:
     bool m_mesh = false;
     ref<BSDF> m_bsdf;
