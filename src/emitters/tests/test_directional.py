@@ -130,7 +130,19 @@ def test_sample_direction(variant_scalar_spectral, spectrum_key, direction):
     assert ek.allclose(res, spec)
 
 
-@pytest.mark.parametrize("spatial_sample", [[0.85, 0.13], [0.16, 0.50], [0.00, 1.00]])
+@pytest.mark.parametrize("spatial_sample", [
+    [0.85, 0.13], 
+    [0.16, 0.50], 
+    [0.00, 1.00],
+    [0.32, 0.87], 
+    [0.16, 0.44],
+    [0.17, 0.44], 
+    [0.22, 0.81],
+    [0.12, 0.82], 
+    [0.99, 0.42],
+    [0.72, 0.40], 
+    [0.01, 0.61],
+])
 @pytest.mark.parametrize("direction", [[0, 0, -1], [1, 1, 1], [0, 0, 1]])
 def test_sample_ray(variant_scalar_rgb, spatial_sample, direction):
     import enoki as ek
