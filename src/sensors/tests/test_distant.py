@@ -216,5 +216,4 @@ def test_render(variant_scalar_rgb, radiance):
     sensor = scene.sensors()[0]
     scene.integrator().render(scene, sensor)
     img = sensor.film().bitmap()
-    print(np.array(img))
     assert np.allclose(np.array(img), radiance)
