@@ -138,3 +138,42 @@ def test_intersection(variant_scalar_rgb):
     # slanting factor (cos theta) integrated over the entire hemisphere
     n_invalid = np.count_nonzero(np.isnan(isect).all(axis=1))
     assert np.allclose(n_invalid / n_rays, 1. - 2. / np.pi * 0.5, atol=1e-2)
+
+
+@pytest.mark.parametrize("radiance", [10**x for x in range(-3, 4)])
+def test_render(variant_scalar_rgb, radiance):
+    # Test render results with a simple scene
+    from mitsuba.core.xml import load_string
+    import numpy as np
+
+    scene_xml = """
+    <scene version="2.0.0">
+        <default name="radiance" value="1.0"/>
+        <default name="spp" value="1"/>
+
+        <integrator type="path"/>
+
+        <sensor type="hdistant">
+            <film type="hdrfilm">
+                <integer name="width" value="32"/>
+                <integer name="height" value="32"/>
+                <string name="pixel_format" value="rgb"/>
+                <rfilter type="box"/>
+            </film>
+
+            <sampler type="independent">
+                <integer name="sample_count" value="$spp"/>
+            </sampler>
+        </sensor>
+
+        <emitter type="constant">
+            <spectrum name="radiance" value="$radiance"/>
+        </emitter>
+    </scene>
+    """
+
+    scene = load_string(scene_xml, spp=1, radiance=radiance)
+    sensor = scene.sensors()[0]
+    scene.integrator().render(scene, sensor)
+    img = sensor.film().bitmap()
+    assert np.allclose(np.array(img), radiance)

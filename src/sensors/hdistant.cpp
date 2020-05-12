@@ -90,7 +90,7 @@ public:
         ray.time = time;
 
         // 1. Sample spectrum
-        auto [wavelengths, weight] =
+        auto [wavelengths, wav_weight] =
             sample_wavelength<Float, Spectrum>(wavelength_sample);
         ray.wavelengths = wavelengths;
 
@@ -114,9 +114,7 @@ public:
 
         ray.update();
 
-        return std::make_pair(
-            ray, unpolarized<Spectrum>(weight) *
-                     (4.f * sqr(math::Pi<Float> * m_bsphere.radius)));
+        return std::make_pair(ray, wav_weight);
     }
 
     std::pair<RayDifferential3f, Spectrum> sample_ray_differential(
@@ -127,7 +125,7 @@ public:
         ray.time = time;
 
         // 1. Sample spectrum
-        auto [wavelengths, weight] =
+        auto [wavelengths, wav_weight] =
             sample_wavelength<Float, Spectrum>(wavelength_sample);
         ray.wavelengths = wavelengths;
 
@@ -157,9 +155,7 @@ public:
 
         ray.update();
 
-        return std::make_pair(
-            ray, unpolarized<Spectrum>(weight) *
-                     (4.f * sqr(math::Pi<Float> * m_bsphere.radius)));
+        return std::make_pair(ray, wav_weight);
     }
 
     /// This sensor does not occupy any particular region of space, return an
