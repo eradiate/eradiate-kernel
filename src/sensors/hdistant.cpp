@@ -96,7 +96,7 @@ public:
 
         // 2. Sample ray direction
         auto trafo  = m_world_transform->eval(time, active);
-        Vector3f v0 = warp::square_to_uniform_hemisphere(direction_sample);
+        Vector3f v0 = warp::square_to_uniform_hemisphere(spatial_sample);
         ray.d       = trafo.transform_affine(-v0);
 
         // 3. Sample ray origin
@@ -104,7 +104,7 @@ public:
             // If no target point is defined, sample a target point on the
             // bounding sphere's cross section
             Point2f offset =
-                warp::square_to_uniform_disk_concentric(spatial_sample);
+                warp::square_to_uniform_disk_concentric(direction_sample);
             Vector3f perp_offset = Frame3f(ray.d).to_world(
                 Vector3f{ offset.x(), offset.y(), 0.f });
             ray.o = m_bsphere.center + (perp_offset - ray.d) * m_bsphere.radius;
@@ -131,7 +131,7 @@ public:
 
         // 2. Sample ray direction
         auto trafo  = m_world_transform->eval(time, active);
-        Vector3f v0 = warp::square_to_uniform_hemisphere(direction_sample);
+        Vector3f v0 = warp::square_to_uniform_hemisphere(spatial_sample);
         ray.d       = trafo.transform_affine(-v0);
 
         // 3. Sample ray origin
@@ -139,7 +139,7 @@ public:
             // If no target point is defined, sample a target point on the
             // bounding sphere's cross section
             Point2f offset =
-                warp::square_to_uniform_disk_concentric(spatial_sample);
+                warp::square_to_uniform_disk_concentric(direction_sample);
             Vector3f perp_offset = Frame3f(ray.d).to_world(
                 Vector3f{ offset.x(), offset.y(), 0.f });
             ray.o = m_bsphere.center + (perp_offset - ray.d) * m_bsphere.radius;
