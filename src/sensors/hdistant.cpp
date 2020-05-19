@@ -109,7 +109,7 @@ public:
                 Vector3f{ offset.x(), offset.y(), 0.f });
             ray.o = m_bsphere.center + (perp_offset - ray.d) * m_bsphere.radius;
         } else {
-            ray.o = m_target - 2. * ray.d * m_bsphere.radius;
+            ray.o = m_target - 2.f * ray.d * m_bsphere.radius;
         }
 
         ray.update();
