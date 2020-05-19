@@ -32,15 +32,27 @@ Distant directional sensor (:monosp:`distant`)
      uniformly over the entire scene.
 
 This sensor plugin implements a distant directional sensor which records
-radiation leaving the scene in a given direction. If the ``target`` parameter
-is not set, rays cast by the sensor will be distributed uniformly on the cross
-section of the scene's bounding sphere.
+radiation leaving the scene in a given direction. By default, it records the 
+(spectral) radiant flux per unit solid angle leaving the scene in the specified
+direction (in unit power per unit solid angle). Rays cast by the sensor are 
+distributed uniformly on the cross section of the scene's bounding sphere.
+
+.. warning::
+
+    If this sensor is used with an environment map emitter, it will also record 
+    radiant flux coming from the part of emitter appearing through the scene's 
+    bounding sphere cross section. Care should be taken notably when using the
+    `constant` or `envmap` emitters.
+
+If the ``target`` parameter is set, the sensor looks at a single point and
+records a (spectral) radiant flux per unit surface area per unit solid angle 
+(in unit power per unit surface area per unit solid angle).
 
 */
 
 MTS_VARIANT class DistantSensor final : public Sensor<Float, Spectrum> {
 public:
-    MTS_IMPORT_BASE(Sensor, m_world_transform, m_needs_sample_3, m_film)
+    MTS_IMPORT_BASE(Sensor, m_world_transform, m_film)
     MTS_IMPORT_TYPES(Scene)
 
     DistantSensor(const Properties &props) : Base(props) {
@@ -76,8 +88,6 @@ public:
             0.5f + math::RayEpsilon<Float>)
             Log(Warn, "This sensor should be used with a reconstruction filter "
                       "with a radius of 0.5 or lower (e.g. default box)");
-
-        m_needs_sample_3 = false;
     }
 
     void set_scene(const Scene *scene) override {
@@ -88,8 +98,8 @@ public:
     }
 
     std::pair<Ray3f, Spectrum> sample_ray(Float time, Float wavelength_sample,
-                                          const Point2f &spatial_sample,
-                                          const Point2f & /*direction_sample*/,
+                                          const Point2f & /*film_sample*/,
+                                          const Point2f &aperture_sample,
                                           Mask active) const override {
         MTS_MASKED_FUNCTION(ProfilerPhase::EndpointSampleRay, active);
         Ray3f ray;
@@ -109,7 +119,7 @@ public:
             // If no target point is defined, sample a target point on the
             // bounding sphere's cross section
             Point2f offset =
-                warp::square_to_uniform_disk_concentric(spatial_sample);
+                warp::square_to_uniform_disk_concentric(aperture_sample);
             Vector3f perp_offset =
                 trafo.transform_affine(Vector3f{ offset.x(), offset.y(), 0.f });
             ray.o = m_bsphere.center + (perp_offset - ray.d) * m_bsphere.radius;
@@ -118,12 +128,15 @@ public:
         }
 
         ray.update();
-        return std::make_pair(ray, wav_weight);
+        return std::make_pair(
+            ray, m_has_target
+                     ? wav_weight
+                     : wav_weight * (math::Pi<Float> * sqr(m_bsphere.radius)));
     }
 
     std::pair<RayDifferential3f, Spectrum> sample_ray_differential(
-        Float time, Float wavelength_sample, const Point2f &spatial_sample,
-        const Point2f & /*direction_sample*/, Mask active) const override {
+        Float time, Float wavelength_sample, const Point2f & /*film_sample*/,
+        const Point2f &aperture_sample, Mask active) const override {
         MTS_MASKED_FUNCTION(ProfilerPhase::EndpointSampleRay, active);
         RayDifferential3f ray;
         ray.time = time;
@@ -142,7 +155,7 @@ public:
             // If no target point is defined, sample a target point on the
             // bounding sphere's cross section
             Point2f offset =
-                warp::square_to_uniform_disk_concentric(spatial_sample);
+                warp::square_to_uniform_disk_concentric(aperture_sample);
             Vector3f perp_offset =
                 trafo.transform_affine(Vector3f{ offset.x(), offset.y(), 0.f });
             ray.o = m_bsphere.center + (perp_offset - ray.d) * m_bsphere.radius;
@@ -155,7 +168,10 @@ public:
         ray.has_differentials = false;
 
         ray.update();
-        return std::make_pair(ray, wav_weight);
+        return std::make_pair(
+            ray, m_has_target
+                     ? wav_weight
+                     : wav_weight * (math::Pi<Float> * sqr(m_bsphere.radius)));
     }
 
     /// This sensor does not occupy any particular region of space, return an
