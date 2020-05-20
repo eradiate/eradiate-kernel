@@ -109,7 +109,7 @@ public:
                 }
 
                 *lum_ptr++ = lum * sin_theta;
-                store(ptr, coeff);
+                store_unaligned(ptr, coeff);
                 ptr += 4;
             }
         }
@@ -258,7 +258,7 @@ public:
         oss << "EnvironmentMapEmitter[" << std::endl
             << "  filename = \"" << m_filename << "\"," << std::endl
             << "  resolution = \"" << m_resolution << "\"," << std::endl
-            << "  bsphere = " << m_bsphere << std::endl
+            << "  bsphere = " << string::indent(m_bsphere) << std::endl
             << "]";
         return oss.str();
     }
