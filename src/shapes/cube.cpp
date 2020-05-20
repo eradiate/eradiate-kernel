@@ -26,20 +26,21 @@ Cube (:monosp:`cube`)
      (Default: none (i.e. object space = world space))
 
 This shape plugin describes a cube intersection primitive, based on the triangle
-mesh plugin.
+mesh class.
 
 */
-template <typename Float, typename Spectrum>
-class Cube final : public Mesh<Float, Spectrum> {
+
+MTS_VARIANT class Cube final : public Mesh<Float, Spectrum> {
 public:
-    MTS_IMPORT_BASE(Mesh, m_face_count, m_faces, m_face_size, m_face_struct,
-                    m_vertex_count, m_vertices, m_vertex_size, m_vertex_struct,
-                    m_normal_offset, m_texcoord_offset, vertex, m_to_world,
-                    recompute_vertex_normals, m_disable_vertex_normals, m_name,
-                    m_bbox, emitter, is_emitter, sensor, is_sensor)
+    MTS_IMPORT_BASE(Mesh, m_name, m_bbox, m_to_world, m_vertex_count,
+                    m_face_count, m_vertex_positions_buf, m_vertex_normals_buf,
+                    m_vertex_texcoords_buf, m_faces_buf, m_mesh_attributes,
+                    m_disable_vertex_normals, has_vertex_normals,
+                    has_vertex_texcoords, recompute_vertex_normals,
+                    set_children)
     MTS_IMPORT_TYPES()
 
-    using typename Base::FaceHolder;
+    using typename Base::FloatStorage;
     using typename Base::InputFloat;
     using typename Base::InputNormal3f;
     using typename Base::InputPoint3f;
@@ -47,7 +48,6 @@ public:
     using typename Base::InputVector3f;
     using typename Base::ScalarIndex;
     using typename Base::ScalarSize;
-    using typename Base::VertexHolder;
     using ScalarIndex3 = std::array<ScalarIndex, 3>;
 
 private:
@@ -83,36 +83,23 @@ public:
         m_face_count   = 12;
         m_vertex_count = 24;
         m_name         = "cube";
-        
-        m_vertex_struct = new Struct();
-        for (auto name : { "x", "y", "z" })
-            m_vertex_struct->append(name, struct_type_v<InputFloat>);
-        for (auto name : { "nx", "ny", "nz" })
-            m_vertex_struct->append(name, struct_type_v<InputFloat>);
-        m_normal_offset = (ScalarIndex) m_vertex_struct->offset("nx");
-        for (auto name : { "u", "v" })
-            m_vertex_struct->append(name, struct_type_v<InputFloat>);
-        m_texcoord_offset = (ScalarIndex) m_vertex_struct->offset("u");
 
-        m_face_struct = new Struct();
-        for (size_t i = 0; i < 3; ++i)
-            m_face_struct->append(tfm::format("i%i", i),
-                                  struct_type_v<ScalarIndex>);
+        m_faces_buf =
+            DynamicBuffer<UInt32>::copy(triangles.data(), m_face_count * 3);
+        m_vertex_positions_buf = empty<FloatStorage>(m_vertex_count * 3);
+        m_vertex_normals_buf   = empty<FloatStorage>(m_vertex_count * 3);
+        m_vertex_texcoords_buf = empty<FloatStorage>(m_vertex_count * 2);
 
-        // x, y, z, nx, ny, nz, u, v are stored in the vertex buffer as float32
-        m_vertex_size = 8 * 4;
-        // faces are defined as 3 uint32 values
-        m_face_size = 3 * 4;
-
-        m_vertices = VertexHolder(new uint8_t[(m_vertex_count) *m_vertex_size]);
-        m_faces    = FaceHolder(new uint8_t[(m_face_count) *m_face_size]);
-        m_normal_offset   = 3 * 4;
-        m_texcoord_offset = 6 * 4;
-
-        memcpy(m_faces.get(), triangles.data(), m_face_count * m_face_size);
+        // TODO this is needed for the bbox(..) methods, but is it slower?
+        m_faces_buf.managed();
+        m_vertex_positions_buf.managed();
+        m_vertex_normals_buf.managed();
+        m_vertex_texcoords_buf.managed();
 
         for (uint8_t i = 0; i < m_vertex_count; ++i) {
-            uint8_t *vertex_ptr = vertex(i);
+            InputFloat *position_ptr = m_vertex_positions_buf.data() + i * 3;
+            InputFloat *normal_ptr   = m_vertex_normals_buf.data() + i * 3;
+            InputFloat *texcoord_ptr = m_vertex_texcoords_buf.data() + i * 2;
 
             InputPoint3f p  = vertices[i];
             InputNormal3f n = normals[i];
@@ -120,18 +107,12 @@ public:
             n               = normalize(m_to_world.transform_affine(n));
             m_bbox.expand(p);
 
-            store_unaligned(vertex_ptr, p);
-            store_unaligned(vertex_ptr + m_normal_offset, n);
-            store_unaligned(vertex_ptr + m_texcoord_offset, texcoords[i]);
+            store_unaligned(position_ptr, p);
+            store_unaligned(normal_ptr, n);
+            store_unaligned(texcoord_ptr, texcoords[i]);
         }
 
-        if (!m_disable_vertex_normals && normals.empty())
-            recompute_vertex_normals();
-
-        if (is_emitter())
-            emitter()->set_shape(this);
-        if (is_sensor())
-            sensor()->set_shape(this);
+        set_children();
     }
 
     MTS_DECLARE_CLASS()
