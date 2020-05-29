@@ -123,7 +123,7 @@ def render(scene,
            unbiased=False,
            optimizer: 'mitsuba.python.autodiff.Optimizer' = None,
            sensor_index=0):
-    """
+    r"""
     Perform a differentiable of the scene `scene`, returning a floating point
     array containing RGB values and AOVs, if applicable.
 
