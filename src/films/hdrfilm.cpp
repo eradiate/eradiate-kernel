@@ -7,6 +7,8 @@
 #include <mitsuba/render/fwd.h>
 #include <mitsuba/render/imageblock.h>
 
+#include <mutex>
+
 NAMESPACE_BEGIN(mitsuba)
 
 /**!
@@ -202,6 +204,7 @@ public:
 
     void put(const ImageBlock *block) override {
         Assert(m_storage != nullptr);
+        std::lock_guard<std::mutex> lock(m_mutex);
         m_storage->put(block);
     }
 
@@ -379,6 +382,7 @@ protected:
     Struct::Type m_component_format;
     fs::path m_dest_file;
     ref<ImageBlock> m_storage;
+    std::mutex m_mutex;
     std::vector<std::string> m_channels;
 };
 

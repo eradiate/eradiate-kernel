@@ -102,8 +102,8 @@ public:
         m_flip_normals = props.bool_("flip_normals", false);
 
         // Update the to_world transform if radius and center are also provided
-        m_to_world = m_to_world * ScalarTransform4f::scale(props.float_("radius", 1.f));
         m_to_world = m_to_world * ScalarTransform4f::translate(props.point3f("center", 0.f));
+        m_to_world = m_to_world * ScalarTransform4f::scale(props.float_("radius", 1.f));
 
         update();
         set_children();
@@ -383,10 +383,6 @@ public:
 
     //! @}
     // =============================================================
-
-    ScalarSize primitive_count() const override { return 1; }
-
-    ScalarSize effective_primitive_count() const override { return 1; }
 
     void traverse(TraversalCallback *callback) override {
         Base::traverse(callback);
