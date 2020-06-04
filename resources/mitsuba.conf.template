@@ -87,7 +87,7 @@
     # mitsuba module. If the value is "", the desired variant will need to be
     # specified using "mitsuba.set_variant(..)" before importing any packages.
 
-    "python-default": "scalar_mono",
+    "python-default": "",
 
     # -------------------------------------------------------------
     # The remainder of this file defines the variants and does not
