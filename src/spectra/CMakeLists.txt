@@ -1,6 +1,7 @@
 set(MTS_PLUGIN_PREFIX "spectra")
 
 add_plugin(blackbody blackbody.cpp)
+add_plugin(discrete discrete.cpp)
 add_plugin(uniform uniform.cpp)
 add_plugin(regular regular.cpp)
 add_plugin(irregular irregular.cpp)
