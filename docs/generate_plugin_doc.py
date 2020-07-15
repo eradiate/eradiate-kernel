@@ -24,14 +24,18 @@ BSDF_ORDERING = ['diffuse',
                  'plastic',
                  'roughplastic',
                  'measured',
+                 'normalmap',
                  'blendbsdf',
                  'mask',
-                 'twosided']
+                 'twosided',
+                 'null']
 
 EMITTER_ORDERING = ['area',
                     'point',
                     'constant',
-                    'envmap']
+                    'envmap',
+                    'spot',
+                    'projector']
 
 SENSOR_ORDERING = ['perspective',
                    'thinlens']

@@ -46,6 +46,7 @@ Options:
 
         Available modes:
               )" << string::indent(MTS_VARIANTS, 14) << R"(
+
     -v, --verbose
         Be more verbose. (can be specified multiple times)
 
@@ -63,6 +64,9 @@ Options:
     -u, --update
         When specified, Mitsuba will update the scene's
         XML description to the latest version.
+
+    -a <path1>;<path2>;..
+        Add one or more entries to the resource search path.
 
     -o <filename>, --output <filename>
         Write the output image to the file "filename".
@@ -123,9 +127,6 @@ int main(int argc, char *argv[]) {
     Logger::static_initialization();
     Bitmap::static_initialization();
     Profiler::static_initialization();
-#if defined(MTS_ENABLE_OPTIX)
-    optix_initialize();
-#endif
 
     // Ensure that the mitsuba-render shared library is loaded
     librender_nop();
@@ -140,6 +141,7 @@ int main(int argc, char *argv[]) {
     auto arg_update    = parser.add(StringVec{ "-u", "--update" }, false);
     auto arg_help      = parser.add(StringVec{ "-h", "--help" });
     auto arg_mode      = parser.add(StringVec{ "-m", "--mode" }, true);
+    auto arg_paths     = parser.add(StringVec{ "-a" }, true);
     auto arg_extra     = parser.add("", true);
     bool print_profile = false;
     xml::ParameterList params;
@@ -177,8 +179,13 @@ int main(int argc, char *argv[]) {
             arg_define = arg_define->next();
         }
         std::string mode = (*arg_mode ? arg_mode->as_string() : MTS_DEFAULT_VARIANT);
-        if (string::starts_with(mode, "gpu"))
+
+#if defined(MTS_ENABLE_OPTIX)
+        if (string::starts_with(mode, "gpu")) {
             cie_alloc();
+            optix_initialize();
+        }
+#endif
 
         size_t sensor_i  = (*arg_sensor_i ? arg_sensor_i->as_int() : 0);
 
@@ -195,6 +202,15 @@ int main(int argc, char *argv[]) {
         filesystem::path base_path = util::library_path().parent_path();
         if (!fr->contains(base_path))
             fr->append(base_path);
+
+        // Append extra paths from command line arguments to the FileResolver search path list
+        if (*arg_paths) {
+            auto extra_paths = string::tokenize(arg_paths->as_string(), ";");
+            for (auto& path : extra_paths) {
+                if (!fr->contains(path))
+                    fr->append(path);
+            }
+        }
 
         if (!*arg_extra || *arg_help) {
             help((int) __global_thread_count);

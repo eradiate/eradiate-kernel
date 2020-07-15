@@ -18,14 +18,17 @@ Perspective pinhole camera (:monosp:`perspective`)
    - |transform|
    - Specifies an optional camera-to-world transformation.
      (Default: none (i.e. camera space = world space))
- * - focal_length
-   - |string|
-   - Denotes the camera's focal length specified using :monosp:`35mm` film equivalent units.
-     See the main description for further details. (Default: :monosp:`50mm`)
  * - fov
    - |float|
-   - An alternative to :monosp:`focal_length`: denotes the camera's field of view in degrees---must be
-     between 0 and 180, excluding the extremes.
+   - Denotes the camera's field of view in degrees---must be between 0 and 180,
+     excluding the extremes. Alternatively, it is also possible to specify a
+     field of view using the :monosp:`focal_length` parameter.
+ * - focal_length
+   - |string|
+   - Denotes the camera's focal length specified using *35mm* film
+     equivalent units. Alternatively, it is also possible to specify a field of
+     view using the :monosp:`fov` parameter. See the main description for further
+     details. (Default: :monosp:`50mm`)
  * - fov_axis
    - |string|
    - When the parameter :monosp:`fov` is given (and only then), this parameter further specifies
@@ -83,9 +86,9 @@ The exact camera position and orientation is most easily expressed using the
 template <typename Float, typename Spectrum>
 class PerspectiveCamera final : public ProjectiveCamera<Float, Spectrum> {
 public:
-    MTS_IMPORT_BASE(ProjectiveCamera, m_world_transform, m_needs_sample_3, m_film, m_sampler,
-                    m_resolution, m_shutter_open, m_shutter_open_time, m_aspect, m_near_clip,
-                    m_far_clip, m_focus_distance)
+    MTS_IMPORT_BASE(ProjectiveCamera, m_world_transform, m_needs_sample_3,
+                    m_film, m_sampler, m_resolution, m_shutter_open,
+                    m_shutter_open_time, m_near_clip, m_far_clip)
     MTS_IMPORT_TYPES()
 
     // =============================================================
@@ -93,42 +96,19 @@ public:
     // =============================================================
 
     PerspectiveCamera(const Properties &props) : Base(props) {
-        m_x_fov = parse_fov(props, m_aspect);
+        ScalarVector2i size = m_film->size();
+        m_x_fov = parse_fov(props, size.x() / (float) size.y());
 
         if (m_world_transform->has_scale())
             Throw("Scale factors in the camera-to-world transformation are not allowed!");
 
         update_camera_transforms();
-        m_needs_sample_3 = false;
     }
 
-    // TODO duplicate code with ThinLens
     void update_camera_transforms() {
-        ScalarVector2f film_size = ScalarVector2f(m_film->size()),
-                       crop_size = ScalarVector2f(m_film->crop_size()),
-                       rel_size  = crop_size / film_size;
-
-        ScalarPoint2f crop_offset = ScalarPoint2f(m_film->crop_offset()),
-                      rel_offset  = crop_offset / film_size;
-
-        /**
-         * These do the following (in reverse order):
-         *
-         * 1. Create transform from camera space to [-1,1]x[-1,1]x[0,1] clip
-         *    coordinates (not taking account of the aspect ratio yet)
-         *
-         * 2+3. Translate and scale to shift the clip coordinates into the
-         *    range from zero to one, and take the aspect ratio into account.
-         *
-         * 4+5. Translate and scale the coordinates once more to account
-         *     for a cropping window (if there is any)
-         */
-        m_camera_to_sample =
-            ScalarTransform4f::scale(ScalarVector3f(1.f / rel_size.x(), 1.f / rel_size.y(), 1.f)) *
-            ScalarTransform4f::translate(ScalarVector3f(-rel_offset.x(), -rel_offset.y(), 0.f)) *
-            ScalarTransform4f::scale(ScalarVector3f(-0.5f, -0.5f * m_aspect, 1.f)) *
-            ScalarTransform4f::translate(ScalarVector3f(-1.f, -1.f / m_aspect, 0.f)) *
-            ScalarTransform4f::perspective(m_x_fov, m_near_clip, m_far_clip);
+        m_camera_to_sample = perspective_projection(
+            m_film->size(), m_film->crop_size(), m_film->crop_offset(),
+            m_x_fov, m_near_clip, m_far_clip);
 
         m_sample_to_camera = m_camera_to_sample.inverse();
 
@@ -225,10 +205,63 @@ public:
         return m_world_transform->translation_bounds();
     }
 
-    void set_crop_window(const ScalarVector2i &crop_size,
-                         const ScalarPoint2i &crop_offset) override {
-        Base::set_crop_window(crop_size, crop_offset);
-        update_camera_transforms();
+    /**
+     * \brief Compute the directional sensor response function of the camera
+     * multiplied with the cosine foreshortening factor associated with the
+     * image plane
+     *
+     * \param d
+     *     A normalized direction vector from the aperture position to the
+     *     reference point in question (all in local camera space)
+     */
+    Float importance(const Vector3f &d) const {
+        /* How is this derived? Imagine a hypothetical image plane at a
+           distance of d=1 away from the pinhole in camera space.
+
+           Then the visible rectangular portion of the plane has the area
+
+              A = (2 * tan(0.5 * xfov in radians))^2 / aspect
+
+           Since we allow crop regions, the actual visible area is
+           potentially reduced:
+
+              A' = A * (cropX / filmX) * (cropY / filmY)
+
+           Perspective transformations of such aligned rectangles produce
+           an equivalent scaled (but otherwise undistorted) rectangle
+           in screen space. This means that a strategy, which uniformly
+           generates samples in screen space has an associated area
+           density of 1/A' on this rectangle.
+
+           To compute the solid angle density of a sampled point P on
+           the rectangle, we can apply the usual measure conversion term:
+
+              d_omega = 1/A' * distance(P, origin)^2 / cos(theta)
+
+           where theta is the angle that the unit direction vector from
+           the origin to P makes with the rectangle. Since
+
+              distance(P, origin)^2 = Px^2 + Py^2 + 1
+
+           and
+
+              cos(theta) = 1/sqrt(Px^2 + Py^2 + 1),
+
+           we have
+
+              d_omega = 1 / (A' * cos^3(theta))
+        */
+
+        Float ct = Frame3f::cos_theta(d), inv_ct = rcp(ct);
+
+        // Compute the position on the plane at distance 1
+        Point2f p(d.x() * inv_ct, d.y() * inv_ct);
+
+        /* Check if the point lies to the front and inside the
+           chosen crop rectangle */
+        Mask valid = ct > 0 && m_image_rect.contains(p);
+
+        return select(valid, m_normalization * inv_ct * inv_ct * inv_ct, 0.f);
     }
 
     //! @}
@@ -252,14 +285,12 @@ public:
             << "  x_fov = " << m_x_fov << "," << std::endl
             << "  near_clip = " << m_near_clip << "," << std::endl
             << "  far_clip = " << m_far_clip << "," << std::endl
-            << "  focus_distance = " << m_focus_distance << "," << std::endl
             << "  film = " << indent(m_film) << "," << std::endl
             << "  sampler = " << indent(m_sampler) << "," << std::endl
             << "  resolution = " << m_resolution << "," << std::endl
             << "  shutter_open = " << m_shutter_open << "," << std::endl
             << "  shutter_open_time = " << m_shutter_open_time << "," << std::endl
-            << "  aspect = " << m_aspect << "," << std::endl
-            << "  world_transform = " << indent(m_world_transform)  << std::endl
+            << "  world_transform = " << indent(m_world_transform) << std::endl
             << "]";
         return oss.str();
     }

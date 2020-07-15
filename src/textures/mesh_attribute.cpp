@@ -48,11 +48,11 @@ whose reflectance is specified using the ``vertex_color`` attribute of that mesh
         </bsdf>
     </shape>
 
-.. warning::
+.. note::
 
-    For spectral variants of the renderer (e.g. ``scalar_spectral``), it is assumed that
-    tri-stimulus color mesh attribute data (e.g. vertex color) is already converted to ``rgb2spec``
-    model coefficients. (e.g. using :py:func:`mitsuba.render.srgb_model_fetch`)
+    For spectral variants of the renderer (e.g. ``scalar_spectral``), when a mesh attribute name
+    contains the string ``"color"``, the tri-stimulus RGB values will be converted to ``rgb2spec``
+    model coefficients automatically.
 
  */
 
@@ -74,20 +74,17 @@ public:
 
     UnpolarizedSpectrum eval(const SurfaceInteraction3f &si, Mask active) const override {
         MTS_MASKED_FUNCTION(ProfilerPhase::TextureEvaluate, active);
-        auto target = select(neq(si.instance, nullptr), si.instance, si.shape);
-        return target->eval_attribute(m_name, si, active) * m_scale;
+        return si.shape->eval_attribute(m_name, si, active) * m_scale;
     }
 
     Float eval_1(const SurfaceInteraction3f &si, Mask active = true) const override {
         MTS_MASKED_FUNCTION(ProfilerPhase::TextureEvaluate, active);
-        auto target = select(neq(si.instance, nullptr), si.instance, si.shape);
-        return target->eval_attribute_1(m_name, si, active) * m_scale;
+        return si.shape->eval_attribute_1(m_name, si, active) * m_scale;
     }
 
     Color3f eval_3(const SurfaceInteraction3f &si, Mask active = true) const override {
         MTS_MASKED_FUNCTION(ProfilerPhase::TextureEvaluate, active);
-        auto target = select(neq(si.instance, nullptr), si.instance, si.shape);
-        return target->eval_attribute_3(m_name, si, active) * m_scale;
+        return si.shape->eval_attribute_3(m_name, si, active) * m_scale;
     }
 
     void traverse(TraversalCallback *callback) override {

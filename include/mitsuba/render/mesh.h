@@ -72,8 +72,8 @@ public:
         return attribute->second.buf;
     }
 
-    /// Add and return an attribute buffer with the given \c name and \c size
-    FloatStorage& add_attribute(const std::string& name, size_t size);
+    /// Add an attribute buffer with the given \c name and \c dim
+    void add_attribute(const std::string& name, size_t dim, const FloatStorage& buf);
 
     /// Returns the face indices associated with triangle \c index
     template <typename Index>
@@ -176,6 +176,9 @@ public:
                                      const SurfaceInteraction3f &si,
                                      Mask active = true) const override;
 
+    virtual SurfaceInteraction3f eval_parameterization(const Point2f &uv,
+                                                       Mask active = true) const override;
+
     /** \brief Ray-triangle intersection test
      *
      * Uses the algorithm by Moeller and Trumbore discussed at
@@ -251,15 +254,24 @@ protected:
     /**
      * \brief Build internal tables for sampling uniformly wrt. area.
      *
-     * Computes the surface area and sets up \ref m_area_distribution.
+     * Computes the surface area and sets up \c m_area_pmf
      * Thread-safe, since it uses a mutex.
      */
-    void area_distr_build();
+    void build_pmf();
+
+    /**
+     * \brief Initialize the \c m_parameterization field for mapping UV
+     * coordinates to positions
+     *
+     * Internally, the function creates a nested scene to leverage optimized
+     * ray tracing functionality in \ref eval_parameterization()
+     */
+    void build_parameterization();
 
     // Ensures that the sampling table are ready.
-    ENOKI_INLINE void area_distr_ensure() const {
-        if (unlikely(m_area_distr.empty()))
-            const_cast<Mesh *>(this)->area_distr_build();
+    ENOKI_INLINE void ensure_pmf_built() const {
+        if (unlikely(m_area_pmf.empty()))
+            const_cast<Mesh *>(this)->build_pmf();
     }
 
     MTS_DECLARE_CLASS()
@@ -268,6 +280,7 @@ protected:
     enum MeshAttributeType {
         Vertex, Face
     };
+
     struct MeshAttribute {
         size_t size;
         MeshAttributeType type;
@@ -333,20 +346,20 @@ protected:
 
     std::unordered_map<std::string, MeshAttribute> m_mesh_attributes;
 
-    // END NEW DESIGN
-
 #if defined(MTS_ENABLE_OPTIX)
     void* m_vertex_buffer_ptr;
-    static const uint32_t triangle_input_flags[1];
 #endif
 
     /// Flag that can be set by the user to disable loading/computation of vertex normals
     bool m_disable_vertex_normals = false;
 
     /* Surface area distribution -- generated on demand when \ref
-       prepare_area_distr() is first called. */
-    DiscreteDistribution<Float> m_area_distr;
+       prepare_area_pmf() is first called. */
+    DiscreteDistribution<Float> m_area_pmf;
     tbb::spin_mutex m_mutex;
+
+    /// Optional: used in eval_parameterization()
+    ref<Scene<Float, Spectrum>> m_parameterization;
 };
 
 MTS_EXTERN_CLASS_RENDER(Mesh)

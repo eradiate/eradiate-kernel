@@ -61,13 +61,13 @@ public:
      *        distribution value divided by the sampling density)
      */
     virtual std::pair<Wavelength, UnpolarizedSpectrum>
-    sample(const SurfaceInteraction3f &si,
-           const Wavelength &sample,
-           Mask active = true) const;
+    sample_spectrum(const SurfaceInteraction3f &si,
+                    const Wavelength &sample,
+                    Mask active = true) const;
 
     /**
-     * \brief Evaluate the density function of the \ref sample() method as a
-     * probability per unit wavelength (in units of 1/nm).
+     * \brief Evaluate the density function of the \ref sample_spectrum()
+     * method as a probability per unit wavelength (in units of 1/nm).
      *
      * Not every implementation necessarily provides this function. The default
      * implementation throws an exception.
@@ -79,8 +79,33 @@ public:
      *     A density value for each wavelength in <tt>si.wavelengths</tt>
      *     (hence the \ref Wavelength type).
      */
-    virtual Wavelength pdf(const SurfaceInteraction3f &si,
-                           Mask active = true) const;
+    virtual Wavelength pdf_spectrum(const SurfaceInteraction3f &si,
+                                    Mask active = true) const;
+
+    /**
+     * \brief Importance sample a surface position proportional to the
+     * overall spectral reflectance or intensity of the texture
+     *
+     * This function assumes that the texture is implemented as a mapping from
+     * 2D UV positions to texture values, which is not necessarily true for all
+     * textures (e.g. 3D noise functions, mesh attributes, etc.). For this
+     * reason, not every will plugin provide a specialized implementation, and
+     * the default implementation simply return the input sample (i.e. uniform
+     * sampling is used).
+     *
+     * \param sample
+     *     A 2D vector of uniform variates
+     *
+     * \return
+     *     1. A texture-space position in the range :math:`[0, 1]^2`
+     *
+     *     2. The associated probability per unit area in UV space
+     */
+    virtual std::pair<Point2f, Float> sample_position(const Point2f &sample,
+                                                      Mask active = true) const;
+
+    /// Returns the probability per unit area of \ref sample_position()
+    virtual Float pdf_position(const Point2f &p, Mask active = true) const;
 
     //! @}
     // ======================================================================
@@ -125,6 +150,7 @@ public:
     virtual Color3f eval_3(const SurfaceInteraction3f &si,
                            Mask active = true) const;
 
+
     /**
      * Return the mean value of the spectrum over the support
      * (MTS_WAVELENGTH_MIN..MTS_WAVELENGTH_MAX)
@@ -135,6 +161,14 @@ public:
      * Even if the operation is provided, it may only return an approximation.
      */
     virtual ScalarFloat mean() const;
+
+    /**
+     * \brief Returns the resolution of the texture, assuming that it is based
+     * on a discrete representation.
+     *
+     * The default implementation returns <tt>(1, 1)</tt>
+     */
+    virtual ScalarVector2i resolution() const;
 
     //! @}
     // ======================================================================
@@ -163,7 +197,7 @@ protected:
 template <typename Float, typename Spectrum>
 class MTS_EXPORT_RENDER Volume : public Object {
 public:
-    MTS_IMPORT_TYPES()
+    MTS_IMPORT_TYPES(Texture)
 
     // ======================================================================
     //! @{ \name 3D Texture interface
@@ -191,8 +225,13 @@ public:
     /// Returns the bounding box of the 3d texture
     ScalarBoundingBox3f bbox() const { return m_bbox; }
 
-    /// Returns the resolution of the texture, defaults to "1"
-    virtual ScalarVector3i resolution() const { return ScalarVector3i(1, 1, 1); }
+    /**
+     * \brief Returns the resolution of the volume, assuming that it is based
+     * on a discrete representation.
+     *
+     * The default implementation returns <tt>(1, 1, 1)</tt>
+     */
+    virtual ScalarVector3i resolution() const;
 
     //! @}
     // ======================================================================
