@@ -16,7 +16,7 @@ template <typename Float, typename Spectrum>
 class MTS_EXPORT_RENDER Mesh : public Shape<Float, Spectrum> {
 public:
     MTS_IMPORT_TYPES()
-    MTS_IMPORT_BASE(Shape, m_to_world, m_mesh, set_children)
+    MTS_IMPORT_BASE(Shape, m_to_world, set_children)
 
     // Mesh is always stored in single precision
     using InputFloat = float;
@@ -157,14 +157,10 @@ public:
     barycentric_coordinates(const SurfaceInteraction3f &si,
                             Mask active = true) const;
 
-    virtual void fill_surface_interaction(const Ray3f &ray,
-                                          const Float *cache,
-                                          SurfaceInteraction3f &si,
-                                          Mask active = true) const override;
-
-    virtual std::pair<Vector3f, Vector3f>
-    normal_derivative(const SurfaceInteraction3f &si,
-                      bool shading_frame = true, Mask active = true) const override;
+    virtual SurfaceInteraction3f compute_surface_interaction(const Ray3f &ray,
+                                                             PreliminaryIntersection3f pi,
+                                                             HitComputeFlags flags,
+                                                             Mask active = true) const override;
 
     virtual UnpolarizedSpectrum eval_attribute(const std::string &name,
                                                const SurfaceInteraction3f &si,
@@ -195,9 +191,9 @@ public:
      *    \c v contains the first two components of the intersection in
      *    barycentric coordinates
      */
-    MTS_INLINE std::tuple<Mask, Float, Float, Float>
-    ray_intersect_triangle(const ScalarIndex &index, const Ray3f &ray,
-                           identity_t<Mask> active = true) const {
+    MTS_INLINE PreliminaryIntersection3f
+    ray_intersect_triangle(const UInt32 &index, const Ray3f &ray,
+                           Mask active = true) const {
         auto fi = face_indices(index);
 
         Point3f p0 = vertex_position(fi[0]),
@@ -220,12 +216,18 @@ public:
         Float t = dot(e2, qvec) * inv_det;
         active &= t >= ray.mint && t <= ray.maxt;
 
-        return { active, u, v, t };
+        PreliminaryIntersection3f pi = zero<PreliminaryIntersection3f>();
+        pi.t = select(active, t, math::Infinity<Float>);
+        pi.prim_uv = Point2f(u, v);
+        pi.prim_index = index;
+        pi.shape = this;
+
+        return pi;
     }
 
 #if defined(MTS_ENABLE_EMBREE)
     /// Return the Embree version of this shape
-    virtual RTCGeometry embree_geometry(RTCDevice device) const override;
+    virtual RTCGeometry embree_geometry(RTCDevice device) override;
 #endif
 
 #if defined(MTS_ENABLE_OPTIX)
@@ -239,6 +241,7 @@ public:
 
     void traverse(TraversalCallback *callback) override;
     void parameters_changed(const std::vector<std::string> &/*keys*/ = {}) override;
+    bool parameters_grad_enabled() const override;
 
     /// Return a human-readable string representation of the shape contents.
     virtual std::string to_string() const override;
@@ -248,7 +251,7 @@ public:
 
 protected:
     Mesh(const Properties &);
-    inline Mesh() { m_mesh = true; }
+    inline Mesh() {}
     virtual ~Mesh();
 
     /**
@@ -364,15 +367,3 @@ protected:
 
 MTS_EXTERN_CLASS_RENDER(Mesh)
 NAMESPACE_END(mitsuba)
-
-// -----------------------------------------------------------------------
-//! @{ \name Enoki accessors for dynamic vectorization
-// -----------------------------------------------------------------------
-
-// // Enable usage of array pointers for our types
-// ENOKI_CALL_SUPPORT_TEMPLATE_BEGIN(mitsuba::Mesh)
-//     ENOKI_CALL_SUPPORT_METHOD(fill_surface_interaction)
-// ENOKI_CALL_SUPPORT_TEMPLATE_END(mitsuba::Mesh)
-
-//! @}
-// -----------------------------------------------------------------------

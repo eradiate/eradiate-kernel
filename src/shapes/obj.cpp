@@ -291,6 +291,9 @@ public:
         m_vertex_normals_buf.managed();
         m_vertex_texcoords_buf.managed();
 
+        if constexpr (is_cuda_array_v<Float>)
+            cuda_sync();
+
         for (const auto& v_ : vertex_map) {
             const VertexBinding *v = &v_;
 
@@ -346,6 +349,6 @@ public:
     MTS_DECLARE_CLASS()
 };
 
-MTS_IMPLEMENT_CLASS_VARIANT(OBJMesh, Shape)
+MTS_IMPLEMENT_CLASS_VARIANT(OBJMesh, Mesh)
 MTS_EXPORT_PLUGIN(OBJMesh, "OBJ Mesh")
 NAMESPACE_END(mitsuba)

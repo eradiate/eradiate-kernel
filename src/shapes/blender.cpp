@@ -314,12 +314,15 @@ public:
         if (has_uvs)
             m_vertex_texcoords_buf.managed();
 
+        if constexpr (is_cuda_array_v<Float>)
+            cuda_sync();
+
         set_children();
     }
 
     MTS_DECLARE_CLASS()
 };
 
-MTS_IMPLEMENT_CLASS_VARIANT(BlenderMesh, Shape)
+MTS_IMPLEMENT_CLASS_VARIANT(BlenderMesh, Mesh)
 MTS_EXPORT_PLUGIN(BlenderMesh, "Blender Mesh")
 NAMESPACE_END(mitsuba)

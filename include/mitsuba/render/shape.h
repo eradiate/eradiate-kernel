@@ -4,9 +4,10 @@
 #include <mitsuba/core/spectrum.h>
 #include <mitsuba/core/transform.h>
 #include <mitsuba/core/bbox.h>
+#include <enoki/stl.h>
 
 #if defined(MTS_ENABLE_OPTIX)
-#include <mitsuba/render/optix/common.h>
+#  include <mitsuba/render/optix/common.h>
 #endif
 
 NAMESPACE_BEGIN(mitsuba)
@@ -134,8 +135,8 @@ public:
      *    sizeof(Float[P])</tt> bytes) that must be supplied to cache
      *    information about the intersection.
      */
-    virtual std::pair<Mask, Float> ray_intersect(const Ray3f &ray, Float *cache,
-                                                 Mask active = true) const;
+    virtual PreliminaryIntersection3f ray_intersect_preliminary(const Ray3f &ray,
+                                                                Mask active = true) const;
 
     /**
      * \brief Fast ray shadow test
@@ -146,8 +147,8 @@ public:
      *
      * No details about the intersection are returned, hence the function is
      * only useful for visibility queries. For most shapes, the implementation
-     * will simply forward the call to \ref ray_intersect(). When the shape
-     * actually contains a nested kd-tree, some optimizations are possible.
+     * will simply forward the call to \ref ray_intersect_preliminary(). When
+     * the shape actually contains a nested kd-tree, some optimizations are possible.
      *
      * \param ray
      *     The ray to be tested for an intersection
@@ -155,35 +156,46 @@ public:
     virtual Mask ray_test(const Ray3f &ray, Mask active = true) const;
 
     /**
-     * \brief Given a surface intersection found by \ref ray_intersect(), fill
-     * a \ref SurfaceInteraction data structure with detailed information
-     * describing the intersection.
+     * \brief Compute and return detailed information related to a surface interaction
      *
-     * The implementation should fill in the fields \c p, \c uv, \c n, \c
-     * sh_frame.n, \c dp_du, and \c dp_dv. The fields \c t, \c time, \c
-     * wavelengths, \c shape, \c prim_index, \c instance, and \c
-     * has_uv_partials will already have been initialized by the caller. The
-     * field \c wi is initialized by the caller following the call to \ref
-     * fill_surface_interaction(), and \c duv_dx, and \c duv_dy are left
-     * uninitialized.
+     * The implementation should at most compute the fields \c p, \c uv, \c n,
+     * \c sh_frame.n, \c dp_du, \c dp_dv, \c dn_du and \c dn_dv. The \c flags parameter
+     * specifies which of those fields should be computed.
      *
-     * \param cache
-     *     Cached information about the previously computed intersection.
+     * The fields \c t, \c time, \c wavelengths, \c shape, \c prim_index, \c instance,
+     * will already have been initialized by the caller. The field \c wi is initialized
+     * by the caller following the call to \ref compute_surface_interaction(), and
+     * \c duv_dx, and \c duv_dy are left uninitialized.
+     *
+     * \param ray
+     *      Ray associated with the ray intersection
+     * \param flags
+     *      Data structure carrying information about the ray intersection
+     * \param flags
+     *      Flags specifying which information should be computed
+     * \return
+     *      A data structure containing the detailed information
      */
-    virtual void fill_surface_interaction(const Ray3f &ray, const Float *cache,
-                                          SurfaceInteraction3f &si, Mask active = true) const;
+    virtual SurfaceInteraction3f compute_surface_interaction(const Ray3f &ray,
+                                                             PreliminaryIntersection3f pi,
+                                                             HitComputeFlags flags = HitComputeFlags::All,
+                                                             Mask active = true) const;
 
     /**
      * \brief Test for an intersection and return detailed information
      *
-     * This operation combines the prior \ref ray_intersect() and \ref
-     * fill_surface_interaction() operations in case intersection with a single
-     * shape is desired.
+     * This operation combines the prior \ref ray_intersect_preliminary() and
+     * \ref compute_surface_interaction() operations.
      *
      * \param ray
      *     The ray to be tested for an intersection
+     *
+     * \param flags
+     *     Describe how the detailed information should be computed
      */
-    SurfaceInteraction3f ray_intersect(const Ray3f &ray, Mask active = true) const;
+    SurfaceInteraction3f ray_intersect(const Ray3f &ray,
+                                       HitComputeFlags flags = HitComputeFlags::All,
+                                       Mask active = true) const;
 
     //! @}
     // =============================================================
@@ -202,7 +214,8 @@ public:
      * \brief Return an axis aligned box that bounds a single shape primitive
      * (including any transformations that may have been applied to it)
      *
-     * \remark The default implementation simply calls \ref bbox()
+     * \remark
+     *     The default implementation simply calls \ref bbox()
      */
     virtual ScalarBoundingBox3f bbox(ScalarIndex index) const;
 
@@ -226,28 +239,6 @@ public:
      * The default implementation throws an exception.
      */
     virtual ScalarFloat surface_area() const;
-
-    /**
-     * \brief Return the derivative of the normal vector with respect to the UV
-     * parameterization
-     *
-     * This can be used to compute Gaussian and principal curvatures, amongst
-     * other things.
-     *
-     * \param si
-     *     Surface interaction associated with the query
-     *
-     * \param shading_frame
-     *     Specifies whether to compute the derivative of the
-     *     geometric normal \a or the shading normal of the surface
-     *
-     * \return
-     *     The partial derivatives of the normal vector with
-     *     respect to \c u and \c v.
-     */
-    virtual std::pair<Vector3f, Vector3f> normal_derivative(const SurfaceInteraction3f &si,
-                                                            bool shading_frame = true,
-                                                            Mask active = true) const;
 
     /**
      * \brief Evaluate a specific shape attribute at the given surface interaction.
@@ -338,7 +329,13 @@ public:
     std::string id() const override;
 
     /// Is this shape a triangle mesh?
-    bool is_mesh() const { return m_mesh; }
+    bool is_mesh() const { return class_()->derives_from(Mesh<Float, Spectrum>::m_class); }
+
+    /// Is this shape a shapegroup?
+    bool is_shapegroup() const { return class_()->name() == "ShapeGroupPlugin"; };
+
+    /// Is this shape an instance?
+    bool is_instance() const { return class_()->name() == "Instance"; };
 
     /// Does the surface of this shape mark a medium transition?
     bool is_medium_transition() const { return m_interior_medium.get() != nullptr ||
@@ -375,7 +372,9 @@ public:
 
     /**
      * \brief Returns the number of sub-primitives that make up this shape
-     * \remark The default implementation simply returns \c 1
+     *
+     * \remark
+     *     The default implementation simply returns \c 1
      */
     virtual ScalarSize primitive_count() const;
 
@@ -388,22 +387,101 @@ public:
      */
     virtual ScalarSize effective_primitive_count() const;
 
+
 #if defined(MTS_ENABLE_EMBREE)
     /// Return the Embree version of this shape
-    virtual RTCGeometry embree_geometry(RTCDevice device) const;
+    virtual RTCGeometry embree_geometry(RTCDevice device);
 #endif
 
 #if defined(MTS_ENABLE_OPTIX)
-    /// Prepare OptiX data buffers
+    /**
+     * \brief Populates the GPU data buffer, used in the Optix Hitgroup sbt records.
+     *
+     * \remark
+     *      Actual implementations of this method should allocate the field \ref
+     *      m_optix_data_ptr on the GPU and populate it with the Optix representation
+     *      of the class.
+     *
+     * The default implementation throws an exception.
+     */
     virtual void optix_prepare_geometry();
-    /// Fill the OptixBuildInput struct
-    virtual void optix_build_input(OptixBuildInput&) const;
-    /// Return a pointer (GPU memory) to the shape's OptiX hitgroup data buffer
-    virtual void* optix_hitgroup_data() { return m_optix_data_ptr; };
+
+    /**
+     * \brief Fills the OptixBuildInput associated with this shape.
+     *
+     * \param build_input
+     *     A reference to the build input to be filled. The field
+     *     build_input.type has to be set, along with the associated members. For
+     *     now, Mistuba only supports the types \ref OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES
+     *     and \ref OPTIX_BUILD_INPUT_TYPE_TRIANGLES.
+     *
+     * The default implementation assumes that an implicit Shape (custom primitive
+     * build type) is begin constructed, with its GPU data stored at \ref m_optix_data_ptr.
+     */
+    virtual void optix_build_input(OptixBuildInput& build_input) const;
+
+    /**
+     * \brief Prepares and fills the \ref OptixInstance(s) associated with this
+     * shape. This process includes generating the Optix instance acceleration
+     * structure (IAS) represented by this shape, and pushing OptixInstance
+     * structs to the provided instances vector.
+     *
+     * \remark
+     *     This method is currently only implemented for the \ref Instance
+     *     and \ref ShapeGroup plugin.
+     *
+     * \param context
+     *     The Optix context that was used to construct the rest of the scene's
+     *     Optix representation.
+     *
+     * \param instances
+     *     The array to which new OptixInstance should be appended.
+     *
+     * \param instance_id
+     *     The instance id, used internally inside Optix to detect when a Shape
+     *     is part of an Instance.
+     *
+     * \param transf
+     *     The current to_world transformation (should allow for recursive instancing).
+     *
+     * The default implementation throws an exception.
+     */
+    virtual void optix_prepare_ias(const OptixDeviceContext& /*context*/,
+                                   std::vector<OptixInstance>& /*instances*/,
+                                   uint32_t /*instance_id*/,
+                                   const ScalarTransform4f& /*transf*/);
+
+    /**
+     * \brief Creates and appends the HitGroupSbtRecord(s) associated with this
+     * shape to the provided array.
+     *
+     * \remark
+     *     This method can append multiple hitgroup records to the array
+     *     (see the \ref Shapegroup plugin for an example).
+     *
+     * \param hitgroup_records
+     *     The array of hitgroup records where the new HitGroupRecords should be
+     *     appended.
+     *
+     * \param program_groups
+     *     The array of available program groups (used to pack the Optix header
+     *     at the beginning of the record).
+     *
+     * The default implementation creates a new HitGroupSbtRecord and fills its
+     * \ref data field with \ref m_optix_data_ptr. It then calls \ref
+     * optixSbtRecordPackHeader with one of the OptixProgramGroup of the \ref
+     * program_groups array (the actual program group index is infered by the
+     * type of the Shape, see \ref get_shape_descr_idx()).
+     */
+    virtual void optix_fill_hitgroup_records(std::vector<HitGroupSbtRecord> &hitgroup_records,
+                                             const OptixProgramGroup *program_groups);
 #endif
 
     void traverse(TraversalCallback *callback) override;
     void parameters_changed(const std::vector<std::string> &/*keys*/ = {}) override;
+
+    /// Return whether shape's parameters require gradients (default implementation return false)
+    virtual bool parameters_grad_enabled() const;
 
     //! @}
     // =============================================================
@@ -421,7 +499,6 @@ protected:
     void set_children();
     std::string get_children_string() const;
 protected:
-    bool m_mesh = false;
     ref<BSDF> m_bsdf;
     ref<Emitter> m_emitter;
     ref<Sensor> m_sensor;
@@ -446,8 +523,7 @@ NAMESPACE_END(mitsuba)
 // -----------------------------------------------------------------------
 
 ENOKI_CALL_SUPPORT_TEMPLATE_BEGIN(mitsuba::Shape)
-    ENOKI_CALL_SUPPORT_METHOD(normal_derivative)
-    ENOKI_CALL_SUPPORT_METHOD(fill_surface_interaction)
+    ENOKI_CALL_SUPPORT_METHOD(compute_surface_interaction)
     ENOKI_CALL_SUPPORT_METHOD(eval_attribute)
     ENOKI_CALL_SUPPORT_METHOD(eval_attribute_1)
     ENOKI_CALL_SUPPORT_METHOD(eval_attribute_3)

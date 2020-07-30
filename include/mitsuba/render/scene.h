@@ -2,6 +2,7 @@
 
 #include <mitsuba/core/spectrum.h>
 #include <mitsuba/render/emitter.h>
+#include <mitsuba/render/shapegroup.h>
 #include <mitsuba/render/fwd.h>
 #include <mitsuba/render/sensor.h>
 
@@ -10,7 +11,8 @@ NAMESPACE_BEGIN(mitsuba)
 template <typename Float, typename Spectrum>
 class MTS_EXPORT_RENDER Scene : public Object {
 public:
-    MTS_IMPORT_TYPES(BSDF, Emitter, Film, Sampler, Shape, Sensor, Integrator, Medium, MediumPtr)
+    MTS_IMPORT_TYPES(BSDF, Emitter, EmitterPtr, Film, Sampler, Shape, ShapePtr,
+                     ShapeGroup, Sensor, Integrator, Medium, MediumPtr)
 
     /// Instantiate a scene from a \ref Properties object
     Scene(const Properties &props);
@@ -35,6 +37,13 @@ public:
      */
     SurfaceInteraction3f ray_intersect(const Ray3f &ray,
                                        Mask active = true) const;
+
+    SurfaceInteraction3f ray_intersect(const Ray3f &ray,
+                                       HitComputeFlags flags,
+                                       Mask active = true) const;
+
+    PreliminaryIntersection3f ray_intersect_preliminary(const Ray3f &ray,
+                                                        Mask active = true) const;
 
     /**
      * \brief Ray intersection using brute force search. Used in
@@ -160,6 +169,9 @@ public:
     /// Update internal state following a parameter update
     void parameters_changed(const std::vector<std::string> &/*keys*/ = {}) override;
 
+    /// Return whether any of the shape's parameters require gradient
+    bool shapes_grad_enabled() const { return m_shapes_grad_enabled; };
+
     /// Return a human-readable string representation of the scene contents.
     virtual std::string to_string() const override;
 
@@ -179,9 +191,13 @@ protected:
     void accel_release_cpu();
     void accel_release_gpu();
 
+    /// Trace a ray and only return a preliminary intersection data structure
+    MTS_INLINE PreliminaryIntersection3f ray_intersect_preliminary_cpu(const Ray3f &ray, Mask active) const;
+    MTS_INLINE PreliminaryIntersection3f ray_intersect_preliminary_gpu(const Ray3f &ray, Mask active) const;
+
     /// Trace a ray
-    MTS_INLINE SurfaceInteraction3f ray_intersect_cpu(const Ray3f &ray, Mask active) const;
-    MTS_INLINE SurfaceInteraction3f ray_intersect_gpu(const Ray3f &ray, Mask active) const;
+    MTS_INLINE SurfaceInteraction3f ray_intersect_cpu(const Ray3f &ray, HitComputeFlags flags, Mask active) const;
+    MTS_INLINE SurfaceInteraction3f ray_intersect_gpu(const Ray3f &ray, HitComputeFlags flags, Mask active) const;
     MTS_INLINE SurfaceInteraction3f ray_intersect_naive_cpu(const Ray3f &ray, Mask active) const;
 
     /// Trace a shadow ray
@@ -198,10 +214,13 @@ protected:
 
     host_vector<ref<Emitter>, Float> m_emitters;
     std::vector<ref<Shape>> m_shapes;
+    std::vector<ref<ShapeGroup>> m_shapegroups;
     std::vector<ref<Sensor>> m_sensors;
     std::vector<ref<Object>> m_children;
     ref<Integrator> m_integrator;
     ref<Emitter> m_environment;
+
+    bool m_shapes_grad_enabled;
 };
 
 /// Dummy function which can be called to ensure that the librender shared library is loaded

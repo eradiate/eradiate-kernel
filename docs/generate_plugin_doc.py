@@ -13,7 +13,9 @@ SHAPE_ORDERING = ['obj',
                   'sphere',
                   'cylinder',
                   'disk',
-                  'rectangle']
+                  'rectangle',
+                  'shapegroup',
+                  'instance']
 
 BSDF_ORDERING = ['diffuse',
                  'dielectric',
@@ -24,6 +26,7 @@ BSDF_ORDERING = ['diffuse',
                  'plastic',
                  'roughplastic',
                  'measured',
+                 'bumpmap',
                  'normalmap',
                  'blendbsdf',
                  'mask',
@@ -51,7 +54,11 @@ SPECTRUM_ORDERING = ['uniform',
                      'srgb_d65',
                      'blackbody']
 
-SAMPLER_ORDERING = ['independent']
+SAMPLER_ORDERING = ['independent',
+                    'stratified',
+                    'multijitter',
+                    'orthogonal',
+                    'ldsampler']
 
 INTEGRATOR_ORDERING = ['direct',
                        'path',

@@ -1,6 +1,6 @@
 #include <mitsuba/core/qmc.h>
-#include <mitsuba/python/python.h>
 #include <pybind11/numpy.h>
+#include <mitsuba/python/python.h>
 
 MTS_PY_EXPORT(qmc) {
     MTS_PY_IMPORT_TYPES()
@@ -23,4 +23,10 @@ MTS_PY_EXPORT(qmc) {
              D(RadicalInverse, permutation))
         .def("inverse_permutation", &RadicalInverse::inverse_permutation,
              D(RadicalInverse, inverse_permutation));
+
+    m.def("radical_inverse_2", vectorize(radical_inverse_2<UInt32>),
+          "index"_a, "scramble"_a, D(radical_inverse_2));
+
+    m.def("sobol_2", vectorize(sobol_2<UInt32>),
+          "index"_a, "scramble"_a, D(sobol_2));
 }

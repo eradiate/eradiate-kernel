@@ -28,9 +28,12 @@ MTS_VARIANT void Scene<Float, Spectrum>::accel_init_cpu(const Properties &/*prop
 
     Timer timer;
     RTCScene embree_scene = rtcNewScene(__embree_device);
+    rtcSetSceneFlags(embree_scene, RTC_SCENE_FLAG_DYNAMIC);
     m_accel = embree_scene;
+
     for (Shape *shape : m_shapes)
-        rtcAttachGeometry(embree_scene, shape->embree_geometry(__embree_device));
+         rtcAttachGeometry(embree_scene, shape->embree_geometry(__embree_device));
+
     rtcCommitScene(embree_scene);
     Log(Info, "Embree ready. (took %s)", util::time_string(timer.value()));
 }
@@ -39,8 +42,110 @@ MTS_VARIANT void Scene<Float, Spectrum>::accel_release_cpu() {
     rtcReleaseScene((RTCScene) m_accel);
 }
 
+MTS_VARIANT typename Scene<Float, Spectrum>::PreliminaryIntersection3f
+Scene<Float, Spectrum>::ray_intersect_preliminary_cpu(const Ray3f &ray, Mask active) const {
+    if constexpr (!is_cuda_array_v<Float>) {
+        RTCIntersectContext context;
+        rtcInitIntersectContext(&context);
+
+        PreliminaryIntersection3f pi = zero<PreliminaryIntersection3f>();
+
+        if constexpr (!is_array_v<Float>) {
+            RTCRayHit rh;
+            rh.ray.org_x = ray.o.x();
+            rh.ray.org_y = ray.o.y();
+            rh.ray.org_z = ray.o.z();
+            rh.ray.tnear = ray.mint;
+            rh.ray.dir_x = ray.d.x();
+            rh.ray.dir_y = ray.d.y();
+            rh.ray.dir_z = ray.d.z();
+            rh.ray.time = 0;
+            rh.ray.tfar = ray.maxt;
+            rh.ray.mask = 0;
+            rh.ray.id = 0;
+            rh.ray.flags = 0;
+            rtcIntersect1((RTCScene) m_accel, &context, &rh);
+
+            if (rh.ray.tfar != ray.maxt) {
+                ScopedPhase sp(ProfilerPhase::CreateSurfaceInteraction);
+                uint32_t shape_index = rh.hit.geomID;
+                uint32_t prim_index  = rh.hit.primID;
+
+                // We get level 0 because we only support one level of instancing
+                uint32_t inst_index = rh.hit.instID[0];
+
+                // If the hit is not on an instance
+                if (inst_index == RTC_INVALID_GEOMETRY_ID) {
+                    // If the hit is not on an instance
+                    pi.shape = m_shapes[shape_index];
+                } else {
+                    // If the hit is on an instance
+                    pi.instance = m_shapes[inst_index];
+                    pi.shape_index = shape_index;
+                }
+
+                pi.t = rh.ray.tfar;
+                pi.prim_index = prim_index;
+                pi.prim_uv = Point2f(rh.hit.u, rh.hit.v);
+            }
+        } else {
+            context.flags = RTC_INTERSECT_CONTEXT_FLAG_COHERENT;
+
+            alignas(alignof(Float)) int valid[MTS_RAY_WIDTH];
+            store(valid, select(active, Int32(-1), Int32(0)));
+
+            RTCRayHitW rh;
+            store(rh.ray.org_x, ray.o.x());
+            store(rh.ray.org_y, ray.o.y());
+            store(rh.ray.org_z, ray.o.z());
+            store(rh.ray.tnear, ray.mint);
+            store(rh.ray.dir_x, ray.d.x());
+            store(rh.ray.dir_y, ray.d.y());
+            store(rh.ray.dir_z, ray.d.z());
+            store(rh.ray.time, Float(0));
+            store(rh.ray.tfar, ray.maxt);
+            store(rh.ray.mask, UInt32(0));
+            store(rh.ray.id, UInt32(0));
+            store(rh.ray.flags, UInt32(0));
+
+            rtcIntersectW(valid, (RTCScene) m_accel, &context, &rh);
+
+            Float t = load<Float>(rh.ray.tfar);
+            Mask hit = active && neq(t, ray.maxt);
+
+            if (likely(any(hit))) {
+                using ShapePtr = replace_scalar_t<Float, const Shape *>;
+                ScopedPhase sp(ProfilerPhase::CreateSurfaceInteraction);
+                UInt32 shape_index = load<UInt32>(rh.hit.geomID);
+                UInt32 prim_index  = load<UInt32>(rh.hit.primID);
+
+                // We get level 0 because we only support one level of instancing
+                UInt32 inst_index = load<UInt32>(rh.hit.instID[0]);
+
+                Mask hit_not_inst = hit &&  eq(inst_index, RTC_INVALID_GEOMETRY_ID);
+                Mask hit_inst     = hit && neq(inst_index, RTC_INVALID_GEOMETRY_ID);
+
+                PreliminaryIntersection3f pi = zero<PreliminaryIntersection3f>();
+                pi.t = select(hit, t, math::Infinity<Float>);
+
+                // Set si.instance and si.shape
+                UInt32 index   = select(hit_inst, inst_index, shape_index);
+                ShapePtr shape = gather<ShapePtr>(m_shapes.data(), index, hit);
+                masked(pi.instance, hit_inst)  = shape;
+                masked(pi.shape, hit_not_inst) = shape;
+
+                pi.prim_index = prim_index;
+                pi.prim_uv = Point2f(load<Float>(rh.hit.u), load<Float>(rh.hit.v));
+            }
+        }
+        return pi;
+    } else {
+        Throw("ray_intersect_preliminary_cpu() should only be called in CPU mode.");
+    }
+}
+
 MTS_VARIANT typename Scene<Float, Spectrum>::SurfaceInteraction3f
-Scene<Float, Spectrum>::ray_intersect_cpu(const Ray3f &ray, Mask active) const {
+Scene<Float, Spectrum>::ray_intersect_cpu(const Ray3f &ray, HitComputeFlags flags, Mask active) const {
     if constexpr (!is_cuda_array_v<Float>) {
         RTCIntersectContext context;
         rtcInitIntersectContext(&context);
@@ -65,30 +170,31 @@ Scene<Float, Spectrum>::ray_intersect_cpu(const Ray3f &ray, Mask active) const {
             if (rh.ray.tfar != ray.maxt) {
                 ScopedPhase sp(ProfilerPhase::CreateSurfaceInteraction);
                 uint32_t shape_index = rh.hit.geomID;
-                uint32_t prim_index = rh.hit.primID;
+                uint32_t prim_index  = rh.hit.primID;
 
-                // Fill in basic information common to all shapes
-                si.t = rh.ray.tfar;
-                si.time = ray.time;
-                si.wavelengths = ray.wavelengths;
-                si.shape = m_shapes[shape_index];
-                si.prim_index = prim_index;
+                // We get level 0 because we only support one level of instancing
+                uint32_t inst_index = rh.hit.instID[0];
 
-                // Create the cache for the Mesh shape
-                Float cache[2] = { rh.hit.u, rh.hit.v };
+                PreliminaryIntersection3f pi = zero<PreliminaryIntersection3f>();
 
-                // Ask shape to fill in the rest
-                si.shape->fill_surface_interaction(ray, cache, si);
+                // If the hit is not on an instance
+                if (inst_index == RTC_INVALID_GEOMETRY_ID) {
+                    // If the hit is not on an instance
+                    pi.shape = m_shapes[shape_index];
+                } else {
+                    // If the hit is on an instance
+                    pi.instance = m_shapes[inst_index];
+                    pi.shape_index = shape_index;
+                }
 
-                // Gram-schmidt orthogonalization to compute local shading frame
-                si.sh_frame.s = normalize(
-                    fnmadd(si.sh_frame.n, dot(si.sh_frame.n, si.dp_du), si.dp_du));
-                si.sh_frame.t = cross(si.sh_frame.n, si.sh_frame.s);
+                pi.t = rh.ray.tfar;
+                pi.prim_index = prim_index;
+                pi.prim_uv = Point2f(rh.hit.u, rh.hit.v);
 
-                // Incident direction in local coordinates
-                si.wi = si.to_local(-ray.d);
+                si = pi.compute_surface_interaction(ray, flags, active);
             } else {
                 si.wavelengths = ray.wavelengths;
+                si.time = ray.time;
                 si.wi = -ray.d;
                 si.t = math::Infinity<Float>;
             }
@@ -114,7 +220,8 @@ Scene<Float, Spectrum>::ray_intersect_cpu(const Ray3f &ray, Mask active) const {
 
             rtcIntersectW(valid, (RTCScene) m_accel, &context, &rh);
 
-            Mask hit = active && neq(load<Float>(rh.ray.tfar), ray.maxt);
+            Float t = load<Float>(rh.ray.tfar);
+            Mask hit = active && neq(t, ray.maxt);
 
             if (likely(any(hit))) {
                 using ShapePtr = replace_scalar_t<Float, const Shape *>;
@@ -122,31 +229,32 @@ Scene<Float, Spectrum>::ray_intersect_cpu(const Ray3f &ray, Mask active) const {
                 UInt32 shape_index = load<UInt32>(rh.hit.geomID);
                 UInt32 prim_index  = load<UInt32>(rh.hit.primID);
 
-                // Fill in basic information common to all shapes
-                si.t = load<Float>(rh.ray.tfar);
-                si.time = ray.time;
-                si.wavelengths = ray.wavelengths;
-                si.shape = gather<ShapePtr>(m_shapes.data(), shape_index, hit);
-                si.prim_index = prim_index;
+                // We get level 0 because we only support one level of instancing
+                UInt32 inst_index = load<UInt32>(rh.hit.instID[0]);
 
-                // Create the cache for the Mesh shapes
-                Float cache[2] = { load<Float>(rh.hit.u), load<Float>(rh.hit.v) };
+                Mask hit_not_inst = hit &&  eq(inst_index, RTC_INVALID_GEOMETRY_ID);
+                Mask hit_inst     = hit && neq(inst_index, RTC_INVALID_GEOMETRY_ID);
 
-                // Ask shape(s) to fill in the rest
-                si.shape->fill_surface_interaction(ray, cache, si, hit);
+                PreliminaryIntersection3f pi;
+                pi.t = select(hit, t, math::Infinity<Float>);
 
-                // Gram-schmidt orthogonalization to compute local shading frame
-                si.sh_frame.s = normalize(
-                    fnmadd(si.sh_frame.n, dot(si.sh_frame.n, si.dp_du), si.dp_du));
-                si.sh_frame.t = cross(si.sh_frame.n, si.sh_frame.s);
+                // Set si.instance and si.shape
+                UInt32 index   = select(hit_inst, inst_index, shape_index);
+                ShapePtr shape = gather<ShapePtr>(m_shapes.data(), index, hit);
+                masked(pi.instance, hit_inst)  = shape;
+                masked(pi.shape, hit_not_inst) = shape;
 
-                // Incident direction in local coordinates
-                si.wi = select(hit, si.to_local(-ray.d), -ray.d);
+                pi.prim_index = prim_index;
+                pi.shape_index = shape_index;
+                pi.prim_uv = Point2f(load<Float>(rh.hit.u), load<Float>(rh.hit.v));
+
+                si = pi.compute_surface_interaction(ray, flags, active);
             } else {
                 si.wavelengths = ray.wavelengths;
+                si.time = ray.time;
                 si.wi = -ray.d;
+                si.t = math::Infinity<Float>;
             }
-            si.t[!hit] = math::Infinity<Float>;
         }
         return si;
     } else {

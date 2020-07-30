@@ -207,6 +207,9 @@ public:
                 m_vertex_normals_buf.managed();
                 m_vertex_texcoords_buf.managed();
 
+                if constexpr (is_cuda_array_v<Float>)
+                    cuda_sync();
+
                 size_t packet_count     = el.count / elements_per_packet;
                 size_t remainder_count  = el.count % elements_per_packet;
                 size_t i_packet_size    = i_struct_size * elements_per_packet;
@@ -778,6 +781,6 @@ private:
     MTS_DECLARE_CLASS()
 };
 
-MTS_IMPLEMENT_CLASS_VARIANT(PLYMesh, Shape)
+MTS_IMPLEMENT_CLASS_VARIANT(PLYMesh, Mesh)
 MTS_EXPORT_PLUGIN(PLYMesh, "PLY Mesh")
 NAMESPACE_END(mitsuba)
