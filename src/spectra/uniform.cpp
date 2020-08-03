@@ -114,10 +114,14 @@ public:
     std::string to_string() const override {
         std::ostringstream oss;
         oss << "UniformSpectrum[" << std::endl
-            << "  value = " << m_value << std::endl
-            << "  lambda_min = " << m_lambda_min << std::endl
-            << "  lambda_max = " << m_lambda_max << std::endl
-            << "]";
+            << "  value = " << m_value << std::endl;
+
+        if constexpr (is_spectral_v<Spectrum>) {
+            oss << "  lambda_min = " << m_lambda_min << std::endl
+                << "  lambda_max = " << m_lambda_max << std::endl;
+        }
+
+        oss << "]";
         return oss.str();
     }
 
