@@ -1,4 +1,8 @@
-""" Mitsuba Python extension library """
+"""Eradiate's Mitsuba-based computational kernel.
+
+The kernel API reference is part of the Mitsuba documentation. Instructions on
+how to access it are found :ref:`here <sec_mitsuba_docs>`.
+"""
 
 import types
 import sys
