@@ -1,9 +1,9 @@
 from itertools import cycle
 
-import mitsuba
 import pytest
-import enoki as ek
 
+import enoki as ek
+import mitsuba
 
 xml_spectrum = {
     "d65": """
