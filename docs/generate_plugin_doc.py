@@ -12,8 +12,10 @@ SHAPE_ORDERING = ['obj',
                   'serialized',
                   'sphere',
                   'cylinder',
+                  'cone',
                   'disk',
                   'rectangle',
+                  'cube',
                   'shapegroup',
                   'instance']
 
@@ -31,7 +33,11 @@ BSDF_ORDERING = ['diffuse',
                  'blendbsdf',
                  'mask',
                  'twosided',
-                 'null']
+                 'null',
+                 'polarizer',
+                 'retarder',
+                 'bilambertian',
+                 'rpv']
 
 EMITTER_ORDERING = ['area',
                     'point',

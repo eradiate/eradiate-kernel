@@ -40,9 +40,9 @@ Cone (:monosp:`cone`)
      not permitted! (Default: none, i.e. object space = world space)
 
 .. subfigstart::
-.. subfigure:: ../../resources/data-extra/docs/images/shape/shape_cone_onesided.jpg
+.. subfigure:: ../../resources/data-extra/docs/images/render/shape_cone_onesided.jpg
    :caption: Cone with the default configuration and diffuse BSDF
-.. subfigure:: ../../resources/data-extra/docs/images/shape/shape_cone_twosided.jpg
+.. subfigure:: ../../resources/data-extra/docs/images/render/shape_cone_twosided.jpg
    :caption: Upside down cone with two-sided shading
 .. subfigend::
    :label: fig-cone

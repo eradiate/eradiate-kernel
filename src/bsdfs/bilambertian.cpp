@@ -11,23 +11,30 @@ NAMESPACE_BEGIN(mitsuba)
 
 .. _bsdf-bilambertian:
 
-Bi-lambertian material (:monosp:`bilambertian`)
+Bi-Lambertian material (:monosp:`bilambertian`)
 -----------------------------------------------
 
 .. pluginparameters::
 
-* - reflectance
-  - |spectrum|
-  - Specifies the diffuse albedo of the material (Default: 0.5)
-* - transmittance
-  - |spectrum|
-  - Specifies the diffuse transmittance of the material (Default: 0.5)
+ * - reflectance
+   - |spectrum| or |texture|
+   - Specifies the diffuse reflectance of the material (Default: 0.5)
+ * - transmittance
+   - |spectrum| or |texture|
+   - Specifies the diffuse transmittance of the material (Default: 0.5)
 
-The bilambertian material represents a material that scatters light diffusely
+The bi-Lambertian material represents a material that scatters light diffusely
 into the entire sphere. The reflectance specifies the amount of light scattered
-into the hemisphere that contains the incoming direction, while the
-transmittance specifies the amount of light scattered into the opposite
-hemisphere.
+into the incoming hemisphere, while the transmittance specifies the amount of 
+light scattered into the outgoing hemisphere. This material is two-sided.
+
+.. subfigstart::
+.. subfigure:: ../../resources/data-extra/docs/images/render/bsdf_bilambertian_reflective.jpg
+   :caption: With dominant reflectivity
+.. subfigure:: ../../resources/data-extra/docs/images/render/bsdf_bilambertian_transmissive.jpg
+   :caption: With dominant transmissivity
+.. subfigend::
+   :label: fig-bilambertian
 
 */
 
