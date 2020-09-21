@@ -262,7 +262,7 @@ public:
         k *= k;
 
         Double A = sqr(dx) + sqr(dy) - k * sqr(dz),
-               B = 2.f * (dx * ox + dy * oy - k * dz * (oz - length)),
+               B = scalar_t<Double>(2.f) * (dx * ox + dy * oy - k * dz * (oz - length)),
                C = sqr(ox) + sqr(oy) - k * sqr(oz - length);
 
         auto [solution_found, near_t, far_t] = math::solve_quadratic(A, B, C);
@@ -312,7 +312,7 @@ public:
         k *= k;
 
         Double A = sqr(dx) + sqr(dy) - k * sqr(dz),
-               B = 2.f * (dx * ox + dy * oy - k * dz * (oz - length)),
+               B = scalar_t<Double>(2.f) * (dx * ox + dy * oy - k * dz * (oz - length)),
                C = sqr(ox) + sqr(oy) - k * sqr(oz - length);
 
         auto [solution_found, near_t, far_t] = math::solve_quadratic(A, B, C);
