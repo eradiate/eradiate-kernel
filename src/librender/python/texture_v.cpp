@@ -1,3 +1,4 @@
+#include <mitsuba/core/properties.h>
 #include <mitsuba/render/interaction.h>
 #include <mitsuba/render/texture.h>
 #include <mitsuba/python/python.h>
@@ -32,4 +33,40 @@ MTS_PY_EXPORT(Texture) {
         .def("pdf_position",
             vectorize(&Texture::pdf_position),
             "p"_a, "active"_a = true, D(Texture, pdf_position));
+}
+
+MTS_VARIANT class PyVolume : public Volume<Float, Spectrum> {
+public:
+    MTS_IMPORT_TYPES(Volume)
+
+    PyVolume(const Properties &props) : Volume(props) { }
+};
+
+MTS_PY_EXPORT(Volume) {
+    MTS_PY_IMPORT_TYPES(Volume)
+    using PyVolume = PyVolume<Float, Spectrum>;
+
+    py::class_<Volume, PyVolume, Object, ref<Volume>>(m, "Volume", D(Volume))
+        .def(py::init<const Properties &>())
+        .def("eval",
+            vectorize(&Volume::eval),
+            "it"_a, "active"_a = true, D(Volume, eval))
+        .def("eval_1",
+            vectorize(&Volume::eval_1),
+            "it"_a, "active"_a = true, D(Volume, eval_1))
+        .def("eval_3",
+            vectorize(&Volume::eval_3),
+            "it"_a, "active"_a = true, D(Volume, eval_3))
+        .def("eval_gradient",
+            vectorize(&Volume::eval_gradient),
+            "it"_a, "active"_a = true, D(Volume, eval_gradient))
+        .def("max",
+            &Volume::max,
+            D(Volume, max))
+        .def("bbox",
+            &Volume::bbox,
+            D(Volume, bbox))
+        .def("resolution",
+            &Volume::resolution,
+            D(Volume, resolution));
 }
