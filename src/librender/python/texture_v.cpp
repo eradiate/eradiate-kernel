@@ -35,19 +35,9 @@ MTS_PY_EXPORT(Texture) {
             "p"_a, "active"_a = true, D(Texture, pdf_position));
 }
 
-MTS_VARIANT class PyVolume : public Volume<Float, Spectrum> {
-public:
-    MTS_IMPORT_TYPES(Volume)
-
-    PyVolume(const Properties &props) : Volume(props) { }
-};
-
 MTS_PY_EXPORT(Volume) {
     MTS_PY_IMPORT_TYPES(Volume)
-    using PyVolume = PyVolume<Float, Spectrum>;
-
-    py::class_<Volume, PyVolume, Object, ref<Volume>>(m, "Volume", D(Volume))
-        .def(py::init<const Properties &>())
+    MTS_PY_CLASS(Volume, Object)
         .def("eval",
             vectorize(&Volume::eval),
             "it"_a, "active"_a = true, D(Volume, eval))
