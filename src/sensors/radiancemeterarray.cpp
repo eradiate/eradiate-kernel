@@ -108,9 +108,9 @@ public:
         }
 
         if (m_film->size() != ScalarPoint2i(m_transforms.size() / 16, 1))
-            Throw("Film size must match the number of radiancemeters defined."
+            Throw("Film width must match the number of radiancemeters defined."
                   "Found: %s vs. %s",
-                  m_film->size(), m_transforms.size());
+                  m_film->size().x(), m_sensor_count);
 
         if (m_film->reconstruction_filter()->radius() >
             0.5f + math::RayEpsilon<Float>)
