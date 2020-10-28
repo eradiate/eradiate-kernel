@@ -77,7 +77,7 @@ MTS_VARIANT bool SamplingIntegrator<Float, Spectrum>::render(Scene *scene, Senso
     if constexpr (!is_cuda_array_v<Float>) {
         /// Render on the CPU using a spiral pattern
         size_t n_threads = __global_thread_count;
-        Log(Info, "Starting render job (%ix%i, %i sample%s,%s %i thread%s)",
+        Log(Info, "Starting kernel job (%ix%i, %i sample%s,%s %i thread%s)",
             film_size.x(), film_size.y(),
             total_spp, total_spp == 1 ? "" : "s",
             n_passes > 1 ? tfm::format(" %d passes,", n_passes) : "",
