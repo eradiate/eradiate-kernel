@@ -100,7 +100,7 @@ MTS_VARIANT bool SamplingIntegrator<Float, Spectrum>::render(Scene *scene, Senso
         Spiral spiral(film, m_block_size, n_passes);
 
         ThreadEnvironment env;
-        ref<ProgressReporter> progress = new ProgressReporter("Rendering");
+        ref<ProgressReporter> progress = new ProgressReporter("Processing");
         std::mutex mutex;
 
         // Total number of blocks to be handled, including multiple passes.
@@ -173,7 +173,7 @@ MTS_VARIANT bool SamplingIntegrator<Float, Spectrum>::render(Scene *scene, Senso
     }
 
     if (!m_stop)
-        Log(Info, "Rendering finished. (took %s)",
+        Log(Info, "Processing finished. (took %s)",
             util::time_string(m_render_timer.value(), true));
 
     return !m_stop;
