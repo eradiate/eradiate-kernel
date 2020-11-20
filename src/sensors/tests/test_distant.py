@@ -2,46 +2,62 @@ import numpy as np
 import pytest
 
 import enoki as ek
-import mitsuba
 
 
-def dict_sensor(direction=None, target=None, fwidth=1):
+def sensor_dict(ray_target=None, ray_origin=None, film="default", direction=None):
     result = {"type": "distant"}
 
-    if direction:
+    if film == "default":
+        result.update({
+            "film": {
+                "type": "hdrfilm",
+                "width": 1,
+                "height": 1,
+                "rfilter": {"type": "box"}
+            }
+        })
+
+    if direction is not None:
         result["direction"] = direction
 
-    if target:
-        result["target"] = target
+    if ray_target == "point":
+        result.update({"ray_target": [0, 0, 0]})
 
-    result["film"] = {
-        "type": "hdrfilm",
-        "width": fwidth,
-        "height": 1,
-        "rfilter": {"type": "box"}
-    }
+    elif ray_target == "shape":
+        result.update({"ray_target": {"type": "rectangle"}})
+
+    elif isinstance(ray_target, dict):
+        result.update({"ray_target": ray_target})
+
+    if ray_origin == "shape":
+        result.update({"ray_origin": {"type": "rectangle"}})
+
+    elif isinstance(ray_origin, dict):
+        result.update({"ray_origin": ray_origin})
 
     return result
 
 
-def make_sensor(direction=None, target=None, fwidth=1):
+def make_sensor(d):
     from mitsuba.core.xml import load_dict
-    return load_dict(dict_sensor(direction, target, fwidth))
+    return load_dict(d).expand()[0]
 
 
 def test_construct(variant_scalar_rgb):
-    from mitsuba.core.xml import load_string, load_dict
-
-    # Construct without parameters (wrong film size)
+    # Construct without parameters (expected to raise due to wrong film size)
     with pytest.raises(RuntimeError):
-        sensor = load_dict({"type": "distant"})
+        make_sensor({"type": "distant"})
 
     # Construct with wrong film size
     with pytest.raises(RuntimeError):
-        sensor = make_sensor(fwidth=2)
+        make_sensor(sensor_dict(film={
+            "type": "hdrfilm",
+            "width": 2,
+            "height": 2
+        }))
 
     # Construct with minimal parameters
-    sensor = make_sensor()
+    sensor = make_sensor(sensor_dict())
     assert sensor is not None
     assert not sensor.bbox().valid()  # Degenerate bounding box
 
@@ -50,176 +66,339 @@ def test_construct(variant_scalar_rgb):
                        [1, 0, 0, 0],
                        [0, 0, -1, 0],
                        [0, 0, 0, 1]]
-    sensor = make_sensor(direction=[0, 0, -1])
+    sensor = make_sensor(sensor_dict(direction=[0, 0, -1]))
     assert ek.allclose(
         sensor.world_transform().eval(0.).matrix,
         world_reference
     )
 
-    sensor = make_sensor(direction=[0, 0, -2])
+    sensor = make_sensor(sensor_dict(direction=[0, 0, -2]))
     assert ek.allclose(
         sensor.world_transform().eval(0.).matrix,
         world_reference
     )
 
+    # Test different combinations of target and origin values
+    # -- No target, no origin
+    sensor = make_sensor(sensor_dict())
+    assert sensor is not None
 
-@pytest.mark.parametrize("target", [
-    None,
-    [0.0, 0.0, 0.0],
-    [4.0, 1.0, 0.0],
-    [1.0, 1.0, 0.0],
-    [0.5, -0.3, 0.0],
+    # -- Point target
+    sensor = make_sensor(sensor_dict(ray_target="point"))
+    assert sensor is not None
 
-])
+    # -- Shape target
+    sensor = make_sensor(sensor_dict(ray_target="shape"))
+    assert sensor is not None
+
+    # -- Random object target (we expect to raise)
+    with pytest.raises(RuntimeError):
+        make_sensor(sensor_dict(ray_target={
+            "type": "constant"
+        }))
+
+    # -- Shape origin
+    sensor = make_sensor(sensor_dict(ray_target="shape"))
+    assert sensor is not None
+
+    # -- Random object origin (we expect to raise)
+    with pytest.raises(RuntimeError):
+        make_sensor(sensor_dict(ray_origin={
+            "type": "constant"
+        }))
+
+
 @pytest.mark.parametrize("direction", [
     [0.0, 0.0, 1.0],
     [-1.0, -1.0, 0.0],
     [2.0, 0.0, 0.0]
 ])
-@pytest.mark.parametrize("ray_kind", ["regular", "differential"])
-def test_sample_ray(variant_scalar_rgb, direction, target, ray_kind):
-    sensor = make_sensor(direction, target)
+def test_sample_ray_direction(variant_scalar_rgb, direction):
+    sensor = make_sensor(sensor_dict(direction=direction))
 
+    # Check that directions are appropriately set
     for (sample1, sample2) in [[[0.32, 0.87], [0.16, 0.44]],
                                [[0.17, 0.44], [0.22, 0.81]],
                                [[0.12, 0.82], [0.99, 0.42]],
                                [[0.72, 0.40], [0.01, 0.61]]]:
-
-        if ray_kind == "regular":
-            ray, _ = sensor.sample_ray(1., 1., sample1, sample2, True)
-        elif ray_kind == "differential":
-            ray, _ = sensor.sample_ray_differential(
-                1., 1., sample1, sample2, True)
-            assert not ray.has_differentials
+        ray, _ = sensor.sample_ray(1., 1., sample1, sample2, True)
 
         # Check that ray direction is what is expected
         assert ek.allclose(ray.d, ek.normalize(direction))
 
-        # Check that ray origin is outside of bounding sphere
-        # Bounding sphere is centered at world origin and has radius 1 without scene
-        assert ek.norm(ray.o) >= 1.
+
+def bsphere(bbox):
+    c = bbox.center()
+    return c, ek.norm(c - bbox.max)
 
 
-def make_scene(direction=[0, 0, -1], target=None):
+@pytest.mark.parametrize("ray_kind", ["regular", "differential"])
+def test_sample_ray_origin(variant_scalar_rgb, ray_kind):
+    time = 1.
+    sample_wav = 1.
+    samples = [[[0.32, 0.87], [0.16, 0.44]],
+               [[0.17, 0.44], [0.22, 0.81]],
+               [[0.12, 0.82], [0.99, 0.42]],
+               [[0.72, 0.40], [0.01, 0.61]]]
+
     from mitsuba.core.xml import load_dict
+    from mitsuba.core import ScalarTransform4f
 
-    dict_scene = {
+    # Default origin: use bounding sphere to compute ray origins
+    scene_dict = {
         "type": "scene",
-        "sensor": dict_sensor(direction, target),
-        "surface": {"type": "rectangle"}
+        "shape": {"type": "rectangle"},
+        "sensor": sensor_dict(direction=[0, 0, -1]),
     }
-
-    return load_dict(dict_scene)
-
-
-@pytest.mark.parametrize("target", [[0, 0, 0], [0.5, 0, 1]])
-def test_target(variant_scalar_rgb, target):
-    # Check if the sensor correctly targets the point it is supposed to
-    scene = make_scene(direction=[0, 0, -1], target=target)
+    scene = load_dict(scene_dict)
     sensor = scene.sensors()[0]
-    sampler = sensor.sampler()
 
-    ray, _ = sensor.sample_ray(
-        sampler.next_1d(),
-        sampler.next_1d(),
-        sampler.next_2d(),
-        sampler.next_2d()
-    )
-    si = scene.ray_intersect(ray)
-    assert si.is_valid()
-    assert ek.allclose(si.p, [target[0], target[1], 0.], atol=1e-6)
+    _, bsphere_radius = bsphere(scene.bbox())
 
+    for (sample1, sample2) in samples:
+        if ray_kind == "regular":
+            ray, _ = sensor.sample_ray(
+                time, sample_wav, sample1, sample2, True)
+        elif ray_kind == "differential":
+            ray, _ = sensor.sample_ray_differential(
+                time, sample_wav, sample1, sample2, True)
+            assert not ray.has_differentials
 
-@pytest.mark.parametrize("direction", [[0, 0, -1], [0.5, 0.5, -1]])
-def test_intersection(variant_scalar_rgb, direction):
-    # Check if the sensor correctly casts rays spread uniformly in the scene
-    direction = list(ek.normalize(direction))
-    scene = make_scene(direction=direction)
-    sensor = scene.sensors()[0]
-    sampler = sensor.sampler()
+        assert ek.allclose(ray.o.z, bsphere_radius, rtol=1e-3)
 
-    n_rays = 1000
-    isect = np.empty((n_rays, 3))
+    # Shape origin: we set ray origins to be located on a rectangle located at
+    # an arbitrary z altitude
+    z_offset = 3.42
 
-    for i in range(n_rays):
-        ray, _ = sensor.sample_ray(
-            sampler.next_1d(),
-            sampler.next_1d(),
-            sampler.next_2d(),
-            sampler.next_2d()
-        )
-        si = scene.ray_intersect(ray)
+    for direction in [[0, 0, -1], [0, -2, -1]]:
+        scene_dict = {
+            "type": "scene",
+            "shape": {"type": "rectangle"},
+            "sensor": sensor_dict(
+                direction=direction,
+                ray_origin={
+                    "type": "rectangle",
+                    "to_world":
+                        ScalarTransform4f.translate([0, 0, z_offset]) *
+                        ScalarTransform4f.scale(10)
+                        # ^-- scaling ensures that the square covers the entire
+                        #     area where target points can be located
+                }),
+        }
+        scene = load_dict(scene_dict)
+        sensor = scene.sensors()[0]
 
-        if not si.is_valid():
-            isect[i, :] = np.nan
-        else:
-            isect[i, :] = si.p[:]
+        for (sample1, sample2) in samples:
+            ray, _ = sensor.sample_ray(
+                time, sample_wav, sample1, sample2, True)
+            assert ek.allclose(ray.o.z, z_offset)
 
-    # Average intersection locations should be (in average) centered
-    # around (0, 0, 0)
-    isect_valid = isect[~np.isnan(isect).all(axis=1)]
-    assert np.allclose(isect_valid[:, :2].mean(axis=0), 0., atol=5e-2)
-    assert np.allclose(isect_valid[:, 2], 0., atol=1e-5)
-
-    # Check number of invalid intersections
-    # We expect a ratio of invalid interactions equal to the square's area
-    # divided by the bounding sphere's cross section, weighted by the surface's
-    # slanting factor (cos theta) w.r.t the sensor's direction
-    n_invalid = np.count_nonzero(np.isnan(isect).all(axis=1))
-    assert np.allclose(n_invalid / n_rays, 1. - 2. / np.pi *
-                       ek.dot(direction, [0, 0, -1]), atol=0.1)
-
-
-def test_render(variant_scalar_rgb):
-    # Test render results with a simple scene
-    from mitsuba.core.xml import load_dict
-    from mitsuba.core import Bitmap, Struct, ScalarTransform4f
-
-    for w_e, w_o in zip(([0, 0, -1], [0, 1, -1]), ([0, 0, -1], [0, 1, -1])):
-        l_e = 1.0  # Emitted radiance
-        w_e = list(ek.normalize(w_e))  # Emitter direction
-        w_o = list(ek.normalize(w_o))  # Sensor direction
-        cos_theta_e = abs(ek.dot(w_e, [0, 0, 1]))
-        cos_theta_o = abs(ek.dot(w_o, [0, 0, 1]))
-
-        scale = 0.5
-        rho = 1.0  # Surface reflectance
-        surface_area = 4. * scale ** 2
-
-    expected = l_e * cos_theta_e * surface_area * rho / np.pi * cos_theta_o
-
-    dict_scene = {
+    # Check that wrong origins will lead to invalid rays
+    direction = [0, 0, -1]
+    scene_dict = {
         "type": "scene",
-        "shape": {
+        "shape": {"type": "rectangle"},
+        "sensor": sensor_dict(
+            direction=direction,
+            ray_origin={
                 "type": "rectangle",
-                "to_world": ScalarTransform4f.scale(scale),
-                "bsdf": {"type": "diffuse", "reflectance": rho},
-        },
-        "emitter": {
-            "type": "directional",
-            "irradiance": l_e,
-            "direction": w_e
-        },
-        "sensor": {
+                "to_world":
+                    ScalarTransform4f.translate([0, 0, -1.])
+                    # ^-- origin surface cannot be reached given ray direction:
+                    #     this will always produce invalid origins
+            }),
+    }
+    scene = load_dict(scene_dict)
+    sensor = scene.sensors()[0]
+
+    for (sample1, sample2) in samples:
+        ray, weights = sensor.sample_ray(
+            time, sample_wav, sample1, sample2, True)
+        assert any(ek.isnan(ray.o))
+        assert ek.allclose(weights, 0.)
+
+
+@pytest.mark.parametrize("sensor_setup", [
+    "default",
+    "target_square",
+    "target_square_small",
+    "target_square_large",
+    "target_disk",
+    "target_point",
+])
+@pytest.mark.parametrize("w_e", [
+    [0, 0, -1],
+    [0, 1, -1]
+])
+@pytest.mark.parametrize("w_o", [
+    [0, 0, -1],
+    [0, 1, -1]
+])
+def test_sample_ray_target(variant_scalar_rgb, sensor_setup, w_e, w_o):
+    # This test checks if targeting works as intended by rendering a basic scene
+    from mitsuba.core import ScalarTransform4f, Struct, Bitmap
+    from mitsuba.core.xml import load_dict
+
+    # Basic illumination and sensing parameters
+    l_e = 1.0  # Emitted radiance
+    w_e = list(w_e / np.linalg.norm(w_e))  # Emitter direction
+    w_o = list(w_o / np.linalg.norm(w_o))  # Sensor direction
+    cos_theta_e = abs(np.dot(w_e, [0, 0, 1]))
+    cos_theta_o = abs(np.dot(w_o, [0, 0, 1]))
+
+    # Reflecting surface specification
+    surface_scale = 1.
+    rho = 1.0  # Surface reflectance
+
+    # Sensor definitions
+    sensors = {
+        "default": {  # No target, origin projected to bounding sphere
             "type": "distant",
             "direction": w_o,
+            "sampler": {
+                "type": "independent",
+                "sample_count": 100000,
+            },
             "film": {
-                    "type": "hdrfilm",
-                    "height": 1,
-                    "width": 1,
-                    "pixel_format": "luminance",
-                    "rfilter": {"type": "box"},
+                "type": "hdrfilm",
+                "height": 1,
+                "width": 1,
+                "rfilter": {"type": "box"},
+            }
+        },
+        "target_square": {  # Targeting square, origin projected to bounding sphere
+            "type": "distant",
+            "direction": w_o,
+            "ray_target": {
+                "type": "rectangle",
+                "to_world": ScalarTransform4f.scale(surface_scale)
             },
             "sampler": {
                 "type": "independent",
-                "sample_count": 512
+                "sample_count": 100000,
             },
+            "film": {
+                "type": "hdrfilm",
+                "height": 1,
+                "width": 1,
+                "rfilter": {"type": "box"},
+            }
+        },
+        "target_square_small": {  # Targeting small square, origin projected to bounding sphere
+            "type": "distant",
+            "direction": w_o,
+            "ray_target": {
+                "type": "rectangle",
+                "to_world": ScalarTransform4f.scale(0.5 * surface_scale)
+            },
+            "sampler": {
+                "type": "independent",
+                "sample_count": 100000,
+            },
+            "film": {
+                "type": "hdrfilm",
+                "height": 1,
+                "width": 1,
+                "rfilter": {"type": "box"},
+            }
+        },
+        "target_square_large": {  # Targeting large square, origin projected to bounding sphere
+            "type": "distant",
+            "direction": w_o,
+            "ray_target": {
+                "type": "rectangle",
+                "to_world": ScalarTransform4f.scale(2. * surface_scale)
+            },
+            "sampler": {
+                "type": "independent",
+                "sample_count": 100000,
+            },
+            "film": {
+                "type": "hdrfilm",
+                "height": 1,
+                "width": 1,
+                "rfilter": {"type": "box"},
+            }
+        },
+        "target_point": {  # Targeting point, origin projected to bounding sphere
+            "type": "distant",
+            "direction": w_o,
+            "ray_target": [0, 0, 0],
+            "sampler": {
+                "type": "independent",
+                "sample_count": 100000,
+            },
+            "film": {
+                "type": "hdrfilm",
+                "height": 1,
+                "width": 1,
+                "rfilter": {"type": "box"},
+            }
+        },
+        "target_disk": {  # Targeting disk, origin projected to bounding sphere
+            "type": "distant",
+            "direction": w_o,
+            "ray_target": {
+                "type": "disk",
+                "to_world": ScalarTransform4f.scale(surface_scale)
+            },
+            "sampler": {
+                "type": "independent",
+                "sample_count": 100000,
+            },
+            "film": {
+                "type": "hdrfilm",
+                "height": 1,
+                "width": 1,
+                "rfilter": {"type": "box"},
+            }
+        },
+    }
+
+    # Scene setup
+    scene_dict = {
+        "type": "scene",
+        "shape": {
+            "type": "rectangle",
+            "to_world": ScalarTransform4f.scale(surface_scale),
+            "bsdf": {
+                "type": "diffuse",
+                "reflectance": rho,
+            },
+        },
+        "emitter": {
+            "type": "directional",
+            "direction": w_e,
+            "irradiance": l_e
         },
         "integrator": {"type": "path"}
     }
 
-    scene = load_dict(dict_scene)
+    scene = load_dict({
+        **scene_dict,
+        "sensor": sensors[sensor_setup]
+    })
+
+    # Run simulation
     sensor = scene.sensors()[0]
     scene.integrator().render(scene, sensor)
-    img = np.array(sensor.film().bitmap()).squeeze()
-    assert np.allclose(np.array(img), expected)
+
+    # Check result
+    result = np.array(sensor.film().bitmap().convert(
+        Bitmap.PixelFormat.RGB, Struct.Type.Float32, False)).squeeze()
+
+    surface_area = 4. * surface_scale ** 2  # Area of square surface
+    l_o = l_e * cos_theta_e * rho / np.pi * cos_theta_o
+    expected = {  # Special expected values for some cases
+        "target_square_small": l_o * surface_area * 0.25,
+        "target_point": l_o,
+        "target_disk": l_o * np.pi * surface_scale ** 2,
+    }
+    expected_value = expected.get(sensor_setup, l_o * surface_area)
+
+    rtol = {  # Special tolerance values for some cases
+        "target_square_large": 1e-2,
+    }
+    rtol_value = rtol.get(sensor_setup, 5e-3)
+
+    assert np.allclose(result, expected_value, rtol=rtol_value)
