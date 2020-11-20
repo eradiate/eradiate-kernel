@@ -6,13 +6,16 @@ import mitsuba
 
 
 def dict_sensor(direction=None, target=None, fwidth=1):
-    result = {"type": "distant"}
+    result = {"type": "distant", "target": "circle", "target_radius": 0}
 
     if direction:
         result["direction"] = direction
 
     if target:
-        result["target"] = target
+        result["target_center"] = target
+        result["target"] = "circle"
+    else:
+        result["target_center"] = [0, 0, 0]
 
     result["film"] = {
         "type": "hdrfilm",
@@ -78,7 +81,7 @@ def test_construct(variant_scalar_rgb):
 ])
 @pytest.mark.parametrize("ray_kind", ["regular", "differential"])
 def test_sample_ray(variant_scalar_rgb, direction, target, ray_kind):
-    sensor = make_sensor(direction, target)
+    sensor = make_sensor(direction, target=target)
 
     for (sample1, sample2) in [[[0.32, 0.87], [0.16, 0.44]],
                                [[0.17, 0.44], [0.22, 0.81]],
@@ -105,7 +108,7 @@ def make_scene(direction=[0, 0, -1], target=None):
 
     dict_scene = {
         "type": "scene",
-        "sensor": dict_sensor(direction, target),
+        "sensor": dict_sensor(direction, target=target),
         "surface": {"type": "rectangle"}
     }
 

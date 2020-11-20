@@ -26,10 +26,27 @@ Distant directional sensor (:monosp:`distant`)
    - Alternative (and exclusive) to `to_world`. Direction from which the
      sensor will be recording in world coordinates.
  * - target
+   - |string|
+   - *Optional.* Specify the type of targeting. Two types of target can be specified.
+     Setting the parameter to 'rectangle', will lead to a rectangular target area 
+     defined by the  parameters 'target_min' and 'target_max'.
+     Setting it to 'circle' will produce a circular target area, defined by 
+     the 'target_center' and 'radius' parameters. To define a point like 
+     target, choose 'circle' and set 'radius' to 0.
+     If unset, rays will be cast uniformly over the entire scene.
+ * - target_min
    - |point|
-   - *Optional.* Point (in world coordinates) to which sampled rays will be
-     cast. Useful for one-dimensional scenes. If unset, rays will be cast
-     uniformly over the entire scene.
+   - Minimum coordinates in the xy-plane for the rectangular target area.
+ * - target_max
+   - |point|
+   - Maximum coordinates in the xy-plane for the rectangular target area.
+ * - target_center
+   - |point|
+   - Center point in the xy-plane for the circular target area.
+ * - target_radius
+   - |float|
+   - Radius for the circular target area
+    
 
 This sensor plugin implements a distant directional sensor which records
 radiation leaving the scene in a given direction. By default, it records the 
@@ -74,11 +91,26 @@ public:
         }
 
         if (props.has_property("target")) {
-            m_target     = props.point3f("target");
+            m_target     = props.string("target", "sphere");
             m_has_target = true;
-            Log(Debug, "Targeting point %s", m_target);
         } else {
+            m_target = std::string("None");
             m_has_target = false;
+        }
+
+        m_target_min = props.point3f("target_min", 0.f);
+        m_target_max = props.point3f("target_max", 0.f);
+        m_target_center = props.point3f("target_center", 0.f);
+        m_target_radius = props.float_("target_radius", 0.f);
+
+        if (m_target == "rectangle") {
+            if (not props.has_property("target_min") || not props.has_property("target_max")) {
+                Throw("Rectangular target requires the 'target_min' and 'target_max' parameters");
+            }
+        } else if (m_target == "circle") {
+            if (not props.has_property("target_center") || not props.has_property("target_radius")) {
+                Throw("Circular target requires the 'target_center' and 'target_radius' parameters");
+            }
         }
 
         if (m_film->size() != ScalarPoint2i(1, 1))
@@ -115,6 +147,7 @@ public:
         ray.d      = trafo.transform_affine(Vector3f{ 0.f, 0.f, 1.f });
 
         // 3. Sample ray origin
+        Float target_area = 0.f;
         if (!m_has_target) {
             // If no target point is defined, sample a target point on the
             // bounding sphere's cross section
@@ -124,14 +157,26 @@ public:
                 trafo.transform_affine(Vector3f{ offset.x(), offset.y(), 0.f });
             ray.o = m_bsphere.center + (perp_offset - ray.d) * m_bsphere.radius;
         } else {
-            ray.o = m_target - 2.f * ray.d * m_bsphere.radius;
+            if (m_target == "rectangle") {
+                Float target_x = (m_target_max.x() - m_target_min.x()) * aperture_sample.x() + m_target_min.x();
+                Float target_y = (m_target_max.y() - m_target_min.y()) * aperture_sample.y() + m_target_min.y();
+                Point3f target = Point3f{target_x, target_y, 0};
+                ray.o = target - 2.f * ray.d * m_bsphere.radius;
+                Float target_area = m_target_max.x()-m_target_max.x() * m_target_max.y()-m_target_max.y();
+            } else if (m_target == "circle") {
+                Point2f disk_sample = Point2f(warp::square_to_uniform_disk(aperture_sample)) * m_target_radius;
+                Point3f sample_disk = Point3f(disk_sample.x(), disk_sample.y(), 0.f) + m_target_center;
+                Point3f target = Point3f{sample_disk.x(), sample_disk.y(), 0};
+                ray.o = target - 2.f * ray.d * m_bsphere.radius;
+                Float target_area = math::Pi<Float> * sqr(m_target_radius);
+            }
         }
 
         ray.update();
         return std::make_pair(
             ray, m_has_target
                      ? wav_weight
-                     : wav_weight * (math::Pi<Float> * sqr(m_bsphere.radius)));
+                     : wav_weight * target_area);
     }
 
     std::pair<RayDifferential3f, Spectrum> sample_ray_differential(
@@ -151,6 +196,7 @@ public:
         ray.d      = trafo.transform_affine(Vector3f{ 0.f, 0.f, 1.f });
 
         // 3. Sample ray origin
+        Float target_area = 0.f;
         if (!m_has_target) {
             // If no target point is defined, sample a target point on the
             // bounding sphere's cross section
@@ -160,8 +206,33 @@ public:
                 trafo.transform_affine(Vector3f{ offset.x(), offset.y(), 0.f });
             ray.o = m_bsphere.center + (perp_offset - ray.d) * m_bsphere.radius;
         } else {
-            ray.o = m_target - 2.f * ray.d * m_bsphere.radius;
+            if (m_target == "rectangle") {
+                Float target_x = (m_target_max.x() - m_target_min.x()) * aperture_sample.x() + m_target_min.x();
+                Float target_y = (m_target_max.y() - m_target_min.y()) * aperture_sample.y() + m_target_min.y();
+                Point3f target = Point3f{target_x, target_y, 0};
+                ray.o = target - 2.f * ray.d * m_bsphere.radius;
+                target_area = m_target_max.x()-m_target_max.x() * m_target_max.y()-m_target_max.y();
+            } else if (m_target == "circle") {
+                Point2f disk_sample = Point2f(warp::square_to_uniform_disk(aperture_sample)) * m_target_radius;
+                Point3f sample_disk = Point3f(disk_sample.x(), disk_sample.y(), 0.f) + m_target_center;
+                Point3f target = Point3f{sample_disk.x(), sample_disk.y(), 0};
+                ray.o = target - 2.f * ray.d * m_bsphere.radius;
+                target_area = math::Pi<Float> * sqr(m_target_radius);
+            }
         }
+
+        // // 3. Sample ray origin
+        // if (!m_has_target) {
+        //     // If no target point is defined, sample a target point on the
+        //     // bounding sphere's cross section
+        //     Point2f offset =
+        //         warp::square_to_uniform_disk_concentric(aperture_sample);
+        //     Vector3f perp_offset =
+        //         trafo.transform_affine(Vector3f{ offset.x(), offset.y(), 0.f });
+        //     ray.o = m_bsphere.center + (perp_offset - ray.d) * m_bsphere.radius;
+        // } else {
+        //     ray.o = m_target - 2.f * ray.d * m_bsphere.radius;
+        // }
 
         // 4. Set differentials; since the film size is always 1x1, we don't
         //    have differentials
@@ -171,7 +242,7 @@ public:
         return std::make_pair(
             ray, m_has_target
                      ? wav_weight
-                     : wav_weight * (math::Pi<Float> * sqr(m_bsphere.radius)));
+                     : wav_weight * target_area);
     }
 
     /// This sensor does not occupy any particular region of space, return an
@@ -192,8 +263,12 @@ public:
 
 protected:
     ScalarBoundingSphere3f m_bsphere;
-    ScalarPoint3f m_target;
+    std::string m_target;
     bool m_has_target;
+    Point3f m_target_min;
+    Point3f m_target_max;
+    Point3f m_target_center;
+    Float m_target_radius;
 };
 
 MTS_IMPLEMENT_CLASS_VARIANT(DistantSensor, Sensor)
