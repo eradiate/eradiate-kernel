@@ -25,27 +25,27 @@ Distant directional sensor (:monosp:`distant`)
    - |vector|
    - Alternative (and exclusive) to `to_world`. Direction from which the
      sensor will be recording in world coordinates.
- * - target
+ * - origin
    - |string|
-   - *Optional.* Specify the type of targeting. Two types of target can be specified.
-     Setting the parameter to 'rectangle', will lead to a rectangular target area 
-     defined by the  parameters 'target_min' and 'target_max'.
-     Setting it to 'circle' will produce a circular target area, defined by 
-     the 'target_center' and 'radius' parameters. To define a point like 
-     target, choose 'circle' and set 'radius' to 0.
+   - *Optional.* Specify the type of origining. Two types of origin can be specified.
+     Setting the parameter to 'rectangle', will lead to a rectangular origin area 
+     defined by the  parameters 'origin_min' and 'origin_max'.
+     Setting it to 'circle' will produce a circular origin area, defined by 
+     the 'origin_center' and 'radius' parameters. To define a point like 
+     origin, choose 'circle' and set 'radius' to 0.
      If unset, rays will be cast uniformly over the entire scene.
- * - target_min
+ * - origin_a
    - |point|
-   - Minimum coordinates in the xy-plane for the rectangular target area.
- * - target_max
+   - Coordinates in the xy-plane for the rectangular origin area.
+ * - origin_b
    - |point|
-   - Maximum coordinates in the xy-plane for the rectangular target area.
- * - target_center
+   - Maximum coordinates in the xy-plane for the rectangular origin area.
+ * - origin_center
    - |point|
-   - Center point in the xy-plane for the circular target area.
- * - target_radius
+   - Center point in the xy-plane for the circular origin area.
+ * - origin_radius
    - |float|
-   - Radius for the circular target area
+   - Radius for the circular origin area
     
 
 This sensor plugin implements a distant directional sensor which records
@@ -61,9 +61,20 @@ distributed uniformly on the cross section of the scene's bounding sphere.
     bounding sphere cross section. Care should be taken notably when using the
     `constant` or `envmap` emitters.
 
-If the ``target`` parameter is set, the sensor looks at a single point and
+If the ``origin`` parameter is set, the sensor looks at a single point and
 records a (spectral) radiant flux per unit surface area per unit solid angle 
 (in unit power per unit surface area per unit solid angle).
+
+With the ``origin_`` parameters users can define an area parallel to the xy-plane
+that the sensor's rays will originate from. The area can be defined in two ways:
+
+- Setting `origin` to 'rectangle' lets users define a rectangular area through 
+  two points `origin_a` and `origin_b`. The resulting area will cover the area 
+  from the smaller to the larger value in both dimensions.
+- Setting `origin` to 'circle'  lets users define a circular origin area 
+  through a center `origin_center` and a radius `origin_radius`.
+- If `origin` is not set, the sensor will origin the entire cross section
+  of the scene's bounding sphere.
 
 */
 
@@ -90,27 +101,34 @@ public:
                     ScalarPoint3f(0.0f), ScalarPoint3f(direction), up));
         }
 
-        if (props.has_property("target")) {
-            m_target     = props.string("target", "sphere");
-            m_has_target = true;
+        if (props.has_property("origin")) {
+            m_origin     = props.string("origin", "circle");
         } else {
-            m_target = std::string("None");
-            m_has_target = false;
+            m_origin = std::string("None");
+            m_origin_type = 0;
         }
 
-        m_target_min = props.point3f("target_min", 0.f);
-        m_target_max = props.point3f("target_max", 0.f);
-        m_target_center = props.point3f("target_center", 0.f);
-        m_target_radius = props.float_("target_radius", 0.f);
+        m_origin_a = props.point3f("origin_a", 0.f);
+        m_origin_b = props.point3f("origin_b", 0.f);
+        m_origin_center = props.point3f("origin_center", 0.f);
+        m_origin_radius = props.float_("origin_radius", 0.f);
 
-        if (m_target == "rectangle") {
-            if (not props.has_property("target_min") || not props.has_property("target_max")) {
-                Throw("Rectangular target requires the 'target_min' and 'target_max' parameters");
+        if (m_origin == "rectangle") {
+            if (!props.has_property("origin_a") || !props.has_property("origin_b")) {
+                Throw("Rectangular origin requires the 'origin_a' and 'origin_b' parameters");
             }
-        } else if (m_target == "circle") {
-            if (not props.has_property("target_center") || not props.has_property("target_radius")) {
-                Throw("Circular target requires the 'target_center' and 'target_radius' parameters");
+            if (!m_origin_a.z() == m_origin_b.z()) {
+                Throw("z-components of origin_a and origin_b do not match. "
+                      "Cannot determine origin zone elevation.");
             }
+            m_origin_type = 1;
+            m_origin_area = abs(m_origin_b.x()-m_origin_a.x()) * abs(m_origin_b.y()-m_origin_a.y());
+        } else if (m_origin == "circle") {
+            if (!props.has_property("origin_center") || !props.has_property("origin_radius")) {
+                Throw("Circular origin requires the 'origin_center' and 'origin_radius' parameters");
+            }
+            m_origin_type = 2;
+            m_origin_area = math::Pi<Float> * sqr(m_origin_radius);
         }
 
         if (m_film->size() != ScalarPoint2i(1, 1))
@@ -147,36 +165,30 @@ public:
         ray.d      = trafo.transform_affine(Vector3f{ 0.f, 0.f, 1.f });
 
         // 3. Sample ray origin
-        Float target_area = 0.f;
-        if (!m_has_target) {
-            // If no target point is defined, sample a target point on the
+        Float origin_area = 0.f;
+        if (m_origin_type == 0) {
+            // If no origin is defined, sample a target point on the
             // bounding sphere's cross section
             Point2f offset =
                 warp::square_to_uniform_disk_concentric(aperture_sample);
             Vector3f perp_offset =
                 trafo.transform_affine(Vector3f{ offset.x(), offset.y(), 0.f });
             ray.o = m_bsphere.center + (perp_offset - ray.d) * m_bsphere.radius;
-        } else {
-            if (m_target == "rectangle") {
-                Float target_x = (m_target_max.x() - m_target_min.x()) * aperture_sample.x() + m_target_min.x();
-                Float target_y = (m_target_max.y() - m_target_min.y()) * aperture_sample.y() + m_target_min.y();
-                Point3f target = Point3f{target_x, target_y, 0};
-                ray.o = target - 2.f * ray.d * m_bsphere.radius;
-                Float target_area = m_target_max.x()-m_target_max.x() * m_target_max.y()-m_target_max.y();
-            } else if (m_target == "circle") {
-                Point2f disk_sample = Point2f(warp::square_to_uniform_disk(aperture_sample)) * m_target_radius;
-                Point3f sample_disk = Point3f(disk_sample.x(), disk_sample.y(), 0.f) + m_target_center;
-                Point3f target = Point3f{sample_disk.x(), sample_disk.y(), 0};
-                ray.o = target - 2.f * ray.d * m_bsphere.radius;
-                Float target_area = math::Pi<Float> * sqr(m_target_radius);
-            }
+        } else if (m_origin_type == 1) {
+            Float origin_x = abs(m_origin_b.x() - m_origin_a.x()) * aperture_sample.x() + min(m_origin_a.x(), m_origin_b.x());
+            Float origin_y = abs(m_origin_b.y() - m_origin_a.y()) * aperture_sample.y() + min(m_origin_a.y(), m_origin_b.y());
+            ray.o = Point3f{origin_x, origin_y, m_origin_a.z()};
+        } else if (m_origin_type == 2) {
+            Point2f disk_sample = Point2f(warp::square_to_uniform_disk(aperture_sample)) * m_origin_radius;
+            Point3f sample_disk = Point3f(disk_sample.x(), disk_sample.y(), 0.f) + m_origin_center;
+            ray.o = Point3f{sample_disk.x(), sample_disk.y(), m_origin_center.z()};
         }
 
         ray.update();
         return std::make_pair(
-            ray, m_has_target
+            ray, m_has_origin
                      ? wav_weight
-                     : wav_weight * target_area);
+                     : wav_weight * m_origin_area * Frame3f::cos_theta(ray.d));
     }
 
     std::pair<RayDifferential3f, Spectrum> sample_ray_differential(
@@ -196,43 +208,24 @@ public:
         ray.d      = trafo.transform_affine(Vector3f{ 0.f, 0.f, 1.f });
 
         // 3. Sample ray origin
-        Float target_area = 0.f;
-        if (!m_has_target) {
-            // If no target point is defined, sample a target point on the
+        Float origin_area = 0.f;
+        if (m_origin_type == 0) {
+            // If no origin  is defined, sample a target point on the
             // bounding sphere's cross section
             Point2f offset =
                 warp::square_to_uniform_disk_concentric(aperture_sample);
             Vector3f perp_offset =
                 trafo.transform_affine(Vector3f{ offset.x(), offset.y(), 0.f });
             ray.o = m_bsphere.center + (perp_offset - ray.d) * m_bsphere.radius;
-        } else {
-            if (m_target == "rectangle") {
-                Float target_x = (m_target_max.x() - m_target_min.x()) * aperture_sample.x() + m_target_min.x();
-                Float target_y = (m_target_max.y() - m_target_min.y()) * aperture_sample.y() + m_target_min.y();
-                Point3f target = Point3f{target_x, target_y, 0};
-                ray.o = target - 2.f * ray.d * m_bsphere.radius;
-                target_area = m_target_max.x()-m_target_max.x() * m_target_max.y()-m_target_max.y();
-            } else if (m_target == "circle") {
-                Point2f disk_sample = Point2f(warp::square_to_uniform_disk(aperture_sample)) * m_target_radius;
-                Point3f sample_disk = Point3f(disk_sample.x(), disk_sample.y(), 0.f) + m_target_center;
-                Point3f target = Point3f{sample_disk.x(), sample_disk.y(), 0};
-                ray.o = target - 2.f * ray.d * m_bsphere.radius;
-                target_area = math::Pi<Float> * sqr(m_target_radius);
-            }
+        } else if (m_origin_type == 1) {
+            Float origin_x = abs(m_origin_b.x() - m_origin_a.x()) * aperture_sample.x() + min(m_origin_a.x(), m_origin_b.x());
+            Float origin_y = abs(m_origin_b.y() - m_origin_a.y()) * aperture_sample.y() + min(m_origin_a.y(), m_origin_b.y());
+            ray.o = Point3f{origin_x, origin_y, m_origin_a.z()};
+        } else if (m_origin_type == 2) {
+            Point2f disk_sample = Point2f(warp::square_to_uniform_disk(aperture_sample)) * m_origin_radius;
+            Point3f sample_disk = Point3f(disk_sample.x(), disk_sample.y(), 0.f) + m_origin_center;
+            ray.o = Point3f{sample_disk.x(), sample_disk.y(), m_origin_center.z()};
         }
-
-        // // 3. Sample ray origin
-        // if (!m_has_target) {
-        //     // If no target point is defined, sample a target point on the
-        //     // bounding sphere's cross section
-        //     Point2f offset =
-        //         warp::square_to_uniform_disk_concentric(aperture_sample);
-        //     Vector3f perp_offset =
-        //         trafo.transform_affine(Vector3f{ offset.x(), offset.y(), 0.f });
-        //     ray.o = m_bsphere.center + (perp_offset - ray.d) * m_bsphere.radius;
-        // } else {
-        //     ray.o = m_target - 2.f * ray.d * m_bsphere.radius;
-        // }
 
         // 4. Set differentials; since the film size is always 1x1, we don't
         //    have differentials
@@ -240,9 +233,9 @@ public:
 
         ray.update();
         return std::make_pair(
-            ray, m_has_target
+            ray, m_has_origin
                      ? wav_weight
-                     : wav_weight * target_area);
+                     : wav_weight * m_origin_area * Frame3f::cos_theta(ray.d));
     }
 
     /// This sensor does not occupy any particular region of space, return an
@@ -263,12 +256,14 @@ public:
 
 protected:
     ScalarBoundingSphere3f m_bsphere;
-    std::string m_target;
-    bool m_has_target;
-    Point3f m_target_min;
-    Point3f m_target_max;
-    Point3f m_target_center;
-    Float m_target_radius;
+    std::string m_origin;
+    bool m_has_origin;
+    Point3f m_origin_a;
+    Point3f m_origin_b;
+    Point3f m_origin_center;
+    Float m_origin_radius;
+    Int32 m_origin_type;
+    Float m_origin_area;
 };
 
 MTS_IMPLEMENT_CLASS_VARIANT(DistantSensor, Sensor)

@@ -5,17 +5,26 @@ import enoki as ek
 import mitsuba
 
 
-def dict_sensor(direction=None, target=None, fwidth=1):
-    result = {"type": "distant", "target": "circle", "target_radius": 0}
+def dict_sensor(direction=None, 
+                origin_type=None,
+                origin_center=[0,0,0] ,
+                origin_radius=0,
+                origin_a=[0,0,0],
+                origin_b=[0,0,0],
+                fwidth=1):
+    result = {"type": "distant", "origin": "circle", "origin_radius": 0, "origin_center": [0,0,0]}
 
     if direction:
         result["direction"] = direction
 
-    if target:
-        result["target_center"] = target
-        result["target"] = "circle"
-    else:
-        result["target_center"] = [0, 0, 0]
+    if origin_type == "circle":
+        result["origin"] = origin_type
+        result["origin_center"] = origin_center
+        result["origin_radius"] = origin_radius
+    elif origin_type =="rectangle":
+        result["origin"] = origin_type
+        result["origin_a"] = origin_a
+        result["origin_b"] = origin_b
 
     result["film"] = {
         "type": "hdrfilm",
@@ -27,9 +36,11 @@ def dict_sensor(direction=None, target=None, fwidth=1):
     return result
 
 
-def make_sensor(direction=None, target=None, fwidth=1):
+def make_sensor(**kwargs):
     from mitsuba.core.xml import load_dict
-    return load_dict(dict_sensor(direction, target, fwidth))
+    sensor_dict = dict_sensor(**kwargs)
+    print(sensor_dict)
+    return load_dict(sensor_dict)
 
 
 def test_construct(variant_scalar_rgb):
@@ -66,13 +77,12 @@ def test_construct(variant_scalar_rgb):
     )
 
 
-@pytest.mark.parametrize("target", [
-    None,
-    [0.0, 0.0, 0.0],
-    [4.0, 1.0, 0.0],
-    [1.0, 1.0, 0.0],
-    [0.5, -0.3, 0.0],
-
+@pytest.mark.parametrize("origin", [
+    {"origin_type": None},
+    {"origin_type": "circle", "origin_radius": 0, "origin_center": [0.0, 0.0, 0.0]},
+    {"origin_type": "circle", "origin_radius": 0.5, "origin_center": [4.0, 1.0, 0.0]},
+    {"origin_type": "rectangle", "origin_a": [0,0,0], "origin_b": [0,0,0]},
+    {"origin_type": "rectangle", "origin_a": [-1,-1,0], "origin_b": [1,1,0]}
 ])
 @pytest.mark.parametrize("direction", [
     [0.0, 0.0, 1.0],
@@ -80,8 +90,10 @@ def test_construct(variant_scalar_rgb):
     [2.0, 0.0, 0.0]
 ])
 @pytest.mark.parametrize("ray_kind", ["regular", "differential"])
-def test_sample_ray(variant_scalar_rgb, direction, target, ray_kind):
-    sensor = make_sensor(direction, target=target)
+def test_sample_ray(variant_scalar_rgb, direction, origin, ray_kind):
+    kwargs = origin
+    kwargs["direction"] = direction
+    sensor = make_sensor(**kwargs)
 
     for (sample1, sample2) in [[[0.32, 0.87], [0.16, 0.44]],
                                [[0.17, 0.44], [0.22, 0.81]],
@@ -98,50 +110,35 @@ def test_sample_ray(variant_scalar_rgb, direction, target, ray_kind):
         # Check that ray direction is what is expected
         assert ek.allclose(ray.d, ek.normalize(direction))
 
-        # Check that ray origin is outside of bounding sphere
-        # Bounding sphere is centered at world origin and has radius 1 without scene
-        assert ek.norm(ray.o) >= 1.
 
-
-def make_scene(direction=[0, 0, -1], target=None):
+def make_scene(**kwargs):
     from mitsuba.core.xml import load_dict
 
     dict_scene = {
         "type": "scene",
-        "sensor": dict_sensor(direction, target=target),
+        "sensor": dict_sensor(**kwargs),
         "surface": {"type": "rectangle"}
     }
 
     return load_dict(dict_scene)
 
 
-@pytest.mark.parametrize("target", [[0, 0, 0], [0.5, 0, 1]])
-def test_target(variant_scalar_rgb, target):
-    # Check if the sensor correctly targets the point it is supposed to
-    scene = make_scene(direction=[0, 0, -1], target=target)
+@pytest.mark.parametrize("origin", [
+    {"origin_type": "rectangle", "origin_a": [-1,-1,1], "origin_b": [1,1,1], "expected_invalid":0.},
+    {"origin_type": "rectangle", "origin_a": [-2,-2,2], "origin_b": [2,2,2], "expected_invalid":0.75},
+    {"origin_type": "circle", "origin_center": [0,0,1], "origin_radius": 1, "expected_invalid": 0},
+    {"origin_type": "circle", "origin_center": [0,0,2], "origin_radius": 2, "expected_invalid": 0.6816}
+])
+def test_origin_area(variant_scalar_rgb, origin):
+    """Test if the sensor correctly targets the expected area by computing
+    the fraction of rays with valid intersections"""
+    direction = [0,0,-1]
+    expected_invalid = origin.pop("expected_invalid")
+    scene = make_scene(direction=direction, **origin)
     sensor = scene.sensors()[0]
     sampler = sensor.sampler()
 
-    ray, _ = sensor.sample_ray(
-        sampler.next_1d(),
-        sampler.next_1d(),
-        sampler.next_2d(),
-        sampler.next_2d()
-    )
-    si = scene.ray_intersect(ray)
-    assert si.is_valid()
-    assert ek.allclose(si.p, [target[0], target[1], 0.], atol=1e-6)
-
-
-@pytest.mark.parametrize("direction", [[0, 0, -1], [0.5, 0.5, -1]])
-def test_intersection(variant_scalar_rgb, direction):
-    # Check if the sensor correctly casts rays spread uniformly in the scene
-    direction = list(ek.normalize(direction))
-    scene = make_scene(direction=direction)
-    sensor = scene.sensors()[0]
-    sampler = sensor.sampler()
-
-    n_rays = 1000
+    n_rays = 10000
     isect = np.empty((n_rays, 3))
 
     for i in range(n_rays):
@@ -157,37 +154,49 @@ def test_intersection(variant_scalar_rgb, direction):
             isect[i, :] = np.nan
         else:
             isect[i, :] = si.p[:]
+        
+    # Average intersection locations should be (in average) centered
+    # around the origin specified
+    if origin["origin_type"] == "circle":
+        center = origin["origin_center"]
+    elif origin["origin_type"] == "rectangle":
+        center = (np.array(origin["origin_b"]) + np.array(origin["origin_a"])) / 2.
 
     # Average intersection locations should be (in average) centered
     # around (0, 0, 0)
     isect_valid = isect[~np.isnan(isect).all(axis=1)]
-    assert np.allclose(isect_valid[:, :2].mean(axis=0), 0., atol=5e-2)
-    assert np.allclose(isect_valid[:, 2], 0., atol=1e-5)
+    mean_location = isect_valid.mean(axis=0)
+    print(mean_location)
+    assert np.allclose(mean_location[0], center[0], atol=5e-2)
+    assert np.allclose(mean_location[1], center[1], atol=5e-2)
+    assert np.allclose(mean_location[2], 0., atol=5e-2)
 
-    # Check number of invalid intersections
-    # We expect a ratio of invalid interactions equal to the square's area
-    # divided by the bounding sphere's cross section, weighted by the surface's
-    # slanting factor (cos theta) w.r.t the sensor's direction
     n_invalid = np.count_nonzero(np.isnan(isect).all(axis=1))
-    assert np.allclose(n_invalid / n_rays, 1. - 2. / np.pi *
-                       ek.dot(direction, [0, 0, -1]), atol=0.1)
+
+    assert np.allclose(n_invalid/n_rays, expected_invalid, atol=1e-2)
 
 
-def test_render(variant_scalar_rgb):
+@pytest.mark.parametrize("w_e", [[0, 0, -1], [0, 1, -1]])
+@pytest.mark.parametrize("w_o", [[0, 0, -1], [0, 1, -1]])
+@pytest.mark.parametrize("origin", [
+    {},
+    {"origin": "circle", "origin_center": [0,0,2], "origin_radius": 1},
+    {"origin": "rectangle", "origin_a": [-1,-1,2], "origin_b": [1,1,2]}
+])
+def test_render(variant_scalar_rgb, w_e, w_o, origin):
     # Test render results with a simple scene
     from mitsuba.core.xml import load_dict
     from mitsuba.core import Bitmap, Struct, ScalarTransform4f
 
-    for w_e, w_o in zip(([0, 0, -1], [0, 1, -1]), ([0, 0, -1], [0, 1, -1])):
-        l_e = 1.0  # Emitted radiance
-        w_e = list(ek.normalize(w_e))  # Emitter direction
-        w_o = list(ek.normalize(w_o))  # Sensor direction
-        cos_theta_e = abs(ek.dot(w_e, [0, 0, 1]))
-        cos_theta_o = abs(ek.dot(w_o, [0, 0, 1]))
+    l_e = 1.0  # Emitted radiance
+    w_e = list(ek.normalize(w_e))  # Emitter direction
+    w_o = list(ek.normalize(w_o))  # Sensor direction
+    cos_theta_e = abs(ek.dot(w_e, [0, 0, 1]))
+    cos_theta_o = abs(ek.dot(w_o, [0, 0, 1]))
 
-        scale = 0.5
-        rho = 1.0  # Surface reflectance
-        surface_area = 4. * scale ** 2
+    scale = 0.5
+    rho = 1.0  # Surface reflectance
+    surface_area = 4. * scale ** 2
 
     expected = l_e * cos_theta_e * surface_area * rho / np.pi * cos_theta_o
 
@@ -221,8 +230,12 @@ def test_render(variant_scalar_rgb):
         "integrator": {"type": "path"}
     }
 
+    dict_scene["sensor"] = {**dict_scene["sensor"], **origin}
+    print(dict_scene)
     scene = load_dict(dict_scene)
     sensor = scene.sensors()[0]
     scene.integrator().render(scene, sensor)
     img = np.array(sensor.film().bitmap()).squeeze()
     assert np.allclose(np.array(img), expected)
+
+
