@@ -12,12 +12,12 @@ def dict_sensor(direction=None,
                 origin_a=[0,0,0],
                 origin_b=[0,0,0],
                 fwidth=1):
-    result = {"type": "distant", "origin": "circle", "origin_radius": 0, "origin_center": [0,0,0]}
+    result = {"type": "distant", "origin": "disk", "origin_radius": 0, "origin_center": [0,0,0]}
 
     if direction:
         result["direction"] = direction
 
-    if origin_type == "circle":
+    if origin_type == "disk":
         result["origin"] = origin_type
         result["origin_center"] = origin_center
         result["origin_radius"] = origin_radius
@@ -79,8 +79,8 @@ def test_construct(variant_scalar_rgb):
 
 @pytest.mark.parametrize("origin", [
     {"origin_type": None},
-    {"origin_type": "circle", "origin_radius": 0, "origin_center": [0.0, 0.0, 0.0]},
-    {"origin_type": "circle", "origin_radius": 0.5, "origin_center": [4.0, 1.0, 0.0]},
+    {"origin_type": "disk", "origin_radius": 0, "origin_center": [0.0, 0.0, 0.0]},
+    {"origin_type": "disk", "origin_radius": 0.5, "origin_center": [4.0, 1.0, 0.0]},
     {"origin_type": "rectangle", "origin_a": [0,0,0], "origin_b": [0,0,0]},
     {"origin_type": "rectangle", "origin_a": [-1,-1,0], "origin_b": [1,1,0]}
 ])
@@ -126,8 +126,8 @@ def make_scene(**kwargs):
 @pytest.mark.parametrize("origin", [
     {"origin_type": "rectangle", "origin_a": [-1,-1,1], "origin_b": [1,1,1], "expected_invalid":0.},
     {"origin_type": "rectangle", "origin_a": [-2,-2,2], "origin_b": [2,2,2], "expected_invalid":0.75},
-    {"origin_type": "circle", "origin_center": [0,0,1], "origin_radius": 1, "expected_invalid": 0},
-    {"origin_type": "circle", "origin_center": [0,0,2], "origin_radius": 2, "expected_invalid": 0.6816}
+    {"origin_type": "disk", "origin_center": [0,0,1], "origin_radius": 1, "expected_invalid": 0},
+    {"origin_type": "disk", "origin_center": [0,0,2], "origin_radius": 2, "expected_invalid": 0.6816}
 ])
 def test_origin_area(variant_scalar_rgb, origin):
     """Test if the sensor correctly targets the expected area by computing
@@ -157,7 +157,7 @@ def test_origin_area(variant_scalar_rgb, origin):
         
     # Average intersection locations should be (in average) centered
     # around the origin specified
-    if origin["origin_type"] == "circle":
+    if origin["origin_type"] == "disk":
         center = origin["origin_center"]
     elif origin["origin_type"] == "rectangle":
         center = (np.array(origin["origin_b"]) + np.array(origin["origin_a"])) / 2.
@@ -180,7 +180,7 @@ def test_origin_area(variant_scalar_rgb, origin):
 @pytest.mark.parametrize("w_o", [[0, 0, -1], [0, 1, -1]])
 @pytest.mark.parametrize("origin", [
     {},
-    {"origin": "circle", "origin_center": [0,0,2], "origin_radius": 1},
+    {"origin": "disk", "origin_center": [0,0,2], "origin_radius": 1},
     {"origin": "rectangle", "origin_a": [-1,-1,2], "origin_b": [1,1,2]}
 ])
 def test_render(variant_scalar_rgb, w_e, w_o, origin):

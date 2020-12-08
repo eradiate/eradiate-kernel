@@ -9,6 +9,12 @@
 
 NAMESPACE_BEGIN(mitsuba)
 
+enum class RayOriginType {Distant, Rectangle, Disk};
+
+// Forward declaration of specialized DistantSensor
+template <typename Float, typename Spectrum, RayOriginType OriginType>
+class DistantSensorImpl;
+
 /**!
 
 .. _sensor-distant:
@@ -27,13 +33,14 @@ Distant directional sensor (:monosp:`distant`)
      sensor will be recording in world coordinates.
  * - origin
    - |string|
-   - *Optional.* Specify the type of origining. Two types of origin can be specified.
-     Setting the parameter to 'rectangle', will lead to a rectangular origin area 
-     defined by the  parameters 'origin_min' and 'origin_max'.
-     Setting it to 'circle' will produce a circular origin area, defined by 
-     the 'origin_center' and 'radius' parameters. To define a point like 
-     origin, choose 'circle' and set 'radius' to 0.
-     If unset, rays will be cast uniformly over the entire scene.
+   - *Optional.* Specify the ray origin sampling strategy. 
+     If set to ``"rectangle"``, ray origins will be sampled uniformly from 
+     a xy-plane-aligned rectangular surface defined by the parameters 
+     ``origin_min`` and `` origin_max``. If set to ``"disk"``, ray origins will
+     be sampled uniformly from a xy-plane-aligned disk defined by the parameters 
+     ``origin_center`` and ``origin_radius``. If set to ``"distant"``, ray origins 
+     will be sampled to uniformly cover the entire scene and will be positioned 
+     on a bounding sphere. Default: ``"distant"``.
  * - origin_a
    - |point|
    - Coordinates in the xy-plane for the rectangular origin area.
@@ -78,22 +85,23 @@ that the sensor's rays will originate from. The area can be defined in two ways:
 
 */
 
-MTS_VARIANT class DistantSensor final : public Sensor<Float, Spectrum> {
+template <typename Float, typename Spectrum>
+class DistantSensor final : public Sensor<Float, Spectrum> {
 public:
     MTS_IMPORT_BASE(Sensor, m_world_transform, m_film)
-    MTS_IMPORT_TYPES(Scene)
+    MTS_IMPORT_TYPES()
 
     DistantSensor(const Properties &props) : Base(props) {
         /* Until `set_scene` is called, we have no information
            about the scene and default to the unit bounding sphere. */
         m_bsphere = ScalarBoundingSphere3f(ScalarPoint3f(0.f), 1.f);
 
-        if (props.has_property("direction")) {
-            if (props.has_property("to_world"))
+        if (m_props.has_property("direction")) {
+            if (m_props.has_property("to_world"))
                 Throw("Only one of the parameters 'direction' and 'to_world' "
                       "can be specified at the same time!'");
 
-            ScalarVector3f direction(normalize(props.vector3f("direction")));
+            ScalarVector3f direction(normalize(m_props.vector3f("direction")));
             auto [up, unused] = coordinate_system(direction);
 
             m_world_transform =
@@ -101,34 +109,42 @@ public:
                     ScalarPoint3f(0.0f), ScalarPoint3f(direction), up));
         }
 
-        if (props.has_property("origin")) {
-            m_origin     = props.string("origin", "circle");
+        std::string origin;
+        if (m_props.has_property("origin")) {
+            origin = m_props.string("origin", "distant");
         } else {
-            m_origin = std::string("None");
-            m_origin_type = 0;
+            origin = std::string("distant");
         }
 
-        m_origin_a = props.point3f("origin_a", 0.f);
-        m_origin_b = props.point3f("origin_b", 0.f);
-        m_origin_center = props.point3f("origin_center", 0.f);
-        m_origin_radius = props.float_("origin_radius", 0.f);
+        m_origin_a = m_props.point3f("origin_a", 0.f);
+        m_origin_b = m_props.point3f("origin_b", 0.f);
+        m_origin_center = m_props.point3f("origin_center", 0.f);
+        m_origin_radius = m_props.float_("origin_radius", 0.f);
 
-        if (m_origin == "rectangle") {
-            if (!props.has_property("origin_a") || !props.has_property("origin_b")) {
+        if (origin == "rectangle") {
+            if (!m_props.has_property("origin_a") || !m_props.has_property("origin_b")) {
                 Throw("Rectangular origin requires the 'origin_a' and 'origin_b' parameters");
             }
-            if (!m_origin_a.z() == m_origin_b.z()) {
+            if (!(m_origin_a.z() == m_origin_b.z())) {
                 Throw("z-components of origin_a and origin_b do not match. "
                       "Cannot determine origin zone elevation.");
             }
-            m_origin_type = 1;
+            m_origin_type = RayOriginType::Rectangle;
             m_origin_area = abs(m_origin_b.x()-m_origin_a.x()) * abs(m_origin_b.y()-m_origin_a.y());
-        } else if (m_origin == "circle") {
-            if (!props.has_property("origin_center") || !props.has_property("origin_radius")) {
+        } else if (origin == "disk") {
+            if (!m_props.has_property("origin_center") || !m_props.has_property("origin_radius")) {
                 Throw("Circular origin requires the 'origin_center' and 'origin_radius' parameters");
             }
-            m_origin_type = 2;
+            m_origin_type = RayOriginType::Disk;
             m_origin_area = math::Pi<Float> * sqr(m_origin_radius);
+        } else if (origin == "distant") {
+            m_origin_type = RayOriginType::Distant;
+            m_origin_area = 0.f;
+            // This is a comment for the code review.
+            // I cannot set the area with respect to the bsphere at this point in the code.
+            // see the sampling methods in DistantSensorImpl for setting of this variable
+            // in the RayOriginType::Distant case
+            // m_origin_area = scene->bbox().bounding_sphere();
         }
 
         if (m_film->size() != ScalarPoint2i(1, 1))
@@ -139,6 +155,72 @@ public:
             Log(Warn, "This sensor should be used with a reconstruction filter "
                       "with a radius of 0.5 or lower (e.g. default box)");
     }
+
+    /// This sensor does not occupy any particular region of space, return an
+    /// invalid bounding box
+    ScalarBoundingBox3f bbox() const override { return ScalarBoundingBox3f(); }
+
+    template <RayOriginType OriginType>
+    using Impl = DistantSensorImpl<Float, Spectrum, OriginType>;
+
+    /**
+     * Recursively expand into an implementation specialized to the
+     * origin specification.
+     */
+    std::vector<ref<Object>> expand() const override {
+        ref<Object> result;
+        switch (m_origin_type) {
+            case RayOriginType::Disk:
+                result = (Object *) new Impl<RayOriginType::Disk>(
+                    m_props, m_origin_area, m_origin_a, m_origin_b, m_origin_center, m_origin_radius);
+                break;
+            case RayOriginType::Rectangle:
+                result = (Object *) new Impl<RayOriginType::Rectangle>(
+                    m_props, m_origin_area, m_origin_a, m_origin_b, m_origin_center, m_origin_radius);
+                break;
+            case RayOriginType::Distant:
+                result = (Object *) new Impl<RayOriginType::Distant>(
+                    m_props, m_origin_area, m_origin_a, m_origin_b, m_origin_center, m_origin_radius);
+                break;
+            default:
+                Throw("Unsupported ray origin type!");
+        }
+        return { result };
+    }
+
+    MTS_DECLARE_CLASS()
+
+protected:
+    ScalarBoundingSphere3f m_bsphere;
+    Properties m_props;
+    Point3f m_origin_a;
+    Point3f m_origin_b;
+    Point3f m_origin_center;
+    Float m_origin_radius;
+    RayOriginType m_origin_type;
+    Float m_origin_area;
+};
+
+template <typename Float, typename Spectrum, RayOriginType OriginType>
+class DistantSensorImpl final : public Sensor<Float, Spectrum> {
+public:
+    MTS_IMPORT_BASE(Sensor, m_world_transform, m_film)
+    MTS_IMPORT_TYPES(Scene)
+
+    DistantSensorImpl(const Properties &props, Float origin_area,
+                     Point3f origin_a, Point3f origin_b, Point3f origin_center, Float origin_radius) 
+        : Base(props), m_origin_area(origin_area){
+
+        if constexpr (OriginType == RayOriginType::Disk) {
+            m_origin_center = origin_center;
+            m_origin_radius = origin_radius;
+        }
+        if constexpr (OriginType == RayOriginType::Rectangle) {
+            m_origin_a = origin_a;
+            m_origin_b = origin_b;
+        }
+  
+    };
 
     void set_scene(const Scene *scene) override {
         m_bsphere = scene->bbox().bounding_sphere();
@@ -165,8 +247,7 @@ public:
         ray.d      = trafo.transform_affine(Vector3f{ 0.f, 0.f, 1.f });
 
         // 3. Sample ray origin
-        Float origin_area = 0.f;
-        if (m_origin_type == 0) {
+        if constexpr (OriginType == RayOriginType::Distant) {
             // If no origin is defined, sample a target point on the
             // bounding sphere's cross section
             Point2f offset =
@@ -174,11 +255,13 @@ public:
             Vector3f perp_offset =
                 trafo.transform_affine(Vector3f{ offset.x(), offset.y(), 0.f });
             ray.o = m_bsphere.center + (perp_offset - ray.d) * m_bsphere.radius;
-        } else if (m_origin_type == 1) {
+        } 
+        if constexpr (OriginType == RayOriginType::Rectangle) {
             Float origin_x = abs(m_origin_b.x() - m_origin_a.x()) * aperture_sample.x() + min(m_origin_a.x(), m_origin_b.x());
             Float origin_y = abs(m_origin_b.y() - m_origin_a.y()) * aperture_sample.y() + min(m_origin_a.y(), m_origin_b.y());
             ray.o = Point3f{origin_x, origin_y, m_origin_a.z()};
-        } else if (m_origin_type == 2) {
+        }
+        if constexpr (OriginType == RayOriginType::Disk) {
             Point2f disk_sample = Point2f(warp::square_to_uniform_disk(aperture_sample)) * m_origin_radius;
             Point3f sample_disk = Point3f(disk_sample.x(), disk_sample.y(), 0.f) + m_origin_center;
             ray.o = Point3f{sample_disk.x(), sample_disk.y(), m_origin_center.z()};
@@ -186,9 +269,7 @@ public:
 
         ray.update();
         return std::make_pair(
-            ray, m_has_origin
-                     ? wav_weight
-                     : wav_weight * m_origin_area * Frame3f::cos_theta(ray.d));
+            ray, wav_weight * m_origin_area * Frame3f::cos_theta(ray.d));
     }
 
     std::pair<RayDifferential3f, Spectrum> sample_ray_differential(
@@ -208,23 +289,28 @@ public:
         ray.d      = trafo.transform_affine(Vector3f{ 0.f, 0.f, 1.f });
 
         // 3. Sample ray origin
-        Float origin_area = 0.f;
-        if (m_origin_type == 0) {
-            // If no origin  is defined, sample a target point on the
+        Float origin_area;
+        if constexpr (OriginType == RayOriginType::Distant) {
+            // If no origin is defined, sample a target point on the
             // bounding sphere's cross section
             Point2f offset =
                 warp::square_to_uniform_disk_concentric(aperture_sample);
             Vector3f perp_offset =
                 trafo.transform_affine(Vector3f{ offset.x(), offset.y(), 0.f });
             ray.o = m_bsphere.center + (perp_offset - ray.d) * m_bsphere.radius;
-        } else if (m_origin_type == 1) {
+            origin_area = math::Pi<Float> * sqr(m_bsphere.radius);
+        } 
+        if constexpr (OriginType == RayOriginType::Rectangle) {
             Float origin_x = abs(m_origin_b.x() - m_origin_a.x()) * aperture_sample.x() + min(m_origin_a.x(), m_origin_b.x());
             Float origin_y = abs(m_origin_b.y() - m_origin_a.y()) * aperture_sample.y() + min(m_origin_a.y(), m_origin_b.y());
             ray.o = Point3f{origin_x, origin_y, m_origin_a.z()};
-        } else if (m_origin_type == 2) {
+            origin_area = m_origin_area;
+        }
+        if constexpr (OriginType == RayOriginType::Disk) {
             Point2f disk_sample = Point2f(warp::square_to_uniform_disk(aperture_sample)) * m_origin_radius;
             Point3f sample_disk = Point3f(disk_sample.x(), disk_sample.y(), 0.f) + m_origin_center;
             ray.o = Point3f{sample_disk.x(), sample_disk.y(), m_origin_center.z()};
+            origin_area = m_origin_area;
         }
 
         // 4. Set differentials; since the film size is always 1x1, we don't
@@ -233,9 +319,7 @@ public:
 
         ray.update();
         return std::make_pair(
-            ray, m_has_origin
-                     ? wav_weight
-                     : wav_weight * m_origin_area * Frame3f::cos_theta(ray.d));
+            ray, wav_weight * origin_area * Frame3f::cos_theta(ray.d));
     }
 
     /// This sensor does not occupy any particular region of space, return an
@@ -244,28 +328,70 @@ public:
 
     std::string to_string() const override {
         std::ostringstream oss;
-        oss << "DistantSensor[" << std::endl
-            << "  world_transform = " << m_world_transform << "," << std::endl
-            << "  bsphere = " << m_bsphere << "," << std::endl
-            << "  film = " << m_film << "," << std::endl
-            << "]";
-        return oss.str();
+        if (m_origin_type == RayOriginType::Rectangle) {
+            oss << "DistantSensor[" << std::endl
+                << "  world_transform = " << m_world_transform << "," << std::endl
+                << "  origin_type = " << "rectangle" << "," << std::endl
+                << "  origin_point_a = " << m_origin_a << "," << std::endl
+                << "  origin_point_b = " << m_origin_b << "," << std::endl
+                << "  bsphere = " << m_bsphere << "," << std::endl
+                << "  film = " << m_film << "," << std::endl
+                << "]";
+            return oss.str();
+        } else if (m_origin_type == RayOriginType::Disk) {
+            oss << "DistantSensor[" << std::endl
+                << "  world_transform = " << m_world_transform << "," << std::endl
+                << "  origin_type = " << "disk" << "," << std::endl
+                << "  origin_center = " << m_origin_center << "," << std::endl
+                << "  origin_point_radius = " << m_origin_radius << "," << std::endl
+                << "  bsphere = " << m_bsphere << "," << std::endl
+                << "  film = " << m_film << "," << std::endl
+                << "]";
+            return oss.str();
+        } else if (m_origin_type == RayOriginType::Distant) {
+            oss << "DistantSensor[" << std::endl
+                << "  world_transform = " << m_world_transform << "," << std::endl
+                << "  origin_type = " << "distant" << "," << std::endl
+                << "  bsphere = " << m_bsphere << "," << std::endl
+                << "  film = " << m_film << "," << std::endl
+                << "]";
+            return oss.str();
+        } else {
+            Throw("Unknown origin type");
+        }
     }
 
     MTS_DECLARE_CLASS()
 
 protected:
     ScalarBoundingSphere3f m_bsphere;
-    std::string m_origin;
-    bool m_has_origin;
-    Point3f m_origin_a;
-    Point3f m_origin_b;
     Point3f m_origin_center;
     Float m_origin_radius;
-    Int32 m_origin_type;
+    Point3f m_origin_a;
+    Point3f m_origin_b;
+    bool m_has_origin;
+    RayOriginType m_origin_type;
     Float m_origin_area;
 };
 
 MTS_IMPLEMENT_CLASS_VARIANT(DistantSensor, Sensor)
 MTS_EXPORT_PLUGIN(DistantSensor, "DistantSensor");
+
+NAMESPACE_BEGIN(detail)
+template <RayOriginType OriginType> constexpr const char *distant_sensor_class_name() {
+    return "DistantSensor";
+}
+NAMESPACE_END(detail)
+
+template <typename Float, typename Spectrum, RayOriginType OriginType>
+Class *DistantSensorImpl<Float, Spectrum, OriginType>::m_class = new Class(
+    detail::distant_sensor_class_name<OriginType>(), "Sensor",
+    ::mitsuba::detail::get_variant<Float, Spectrum>(), nullptr, nullptr);
+
+template <typename Float, typename Spectrum, RayOriginType OriginType>
+const Class *DistantSensorImpl<Float, Spectrum, OriginType>::class_() const {
+    return m_class;
+}
+
 NAMESPACE_END(mitsuba)
+
