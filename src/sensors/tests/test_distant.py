@@ -40,7 +40,7 @@ def make_sensor(**kwargs):
     from mitsuba.core.xml import load_dict
     sensor_dict = dict_sensor(**kwargs)
     print(sensor_dict)
-    return load_dict(sensor_dict)
+    return load_dict(sensor_dict).expand()[0    ]
 
 
 def test_construct(variant_scalar_rgb):
