@@ -94,8 +94,8 @@ public:
     DistantSensor(const Properties &props) : Base(props), m_props(props) {
 
         std::string origin;
-        if (m_props.has_property("origin")) {
-            origin = m_props.string("origin", "distant");
+        if (props.has_property("origin")) {
+            origin = props.string("origin", "distant");
         } else {
             origin = std::string("distant");
         }
@@ -108,12 +108,12 @@ public:
             m_origin_type = RayOriginType::Distant;
         }
 
-        m_props.mark_queried("origin_center");
-        m_props.mark_queried("origin_radius");
-        m_props.mark_queried("origin_a");
-        m_props.mark_queried("origin_b");
-        m_props.mark_queried("direction");
-        m_props.mark_queried("to_world");
+        props.mark_queried("origin_center");
+        props.mark_queried("origin_radius");
+        props.mark_queried("origin_a");
+        props.mark_queried("origin_b");
+        props.mark_queried("direction");
+        props.mark_queried("to_world");
     }
 
     /// This sensor does not occupy any particular region of space, return an
@@ -157,14 +157,14 @@ public:
     MTS_IMPORT_BASE(Sensor, m_world_transform, m_film)
     MTS_IMPORT_TYPES(Scene)
 
-    DistantSensorImpl(const Properties &props) : Base(props), m_props(props){
+    DistantSensorImpl(const Properties &props) : Base(props) {
 
-        if (m_props.has_property("direction")) {
-            if (m_props.has_property("to_world"))
+        if (props.has_property("direction")) {
+            if (props.has_property("to_world"))
                 Throw("Only one of the parameters 'direction' and 'to_world' "
                       "can be specified at the same time!'");
 
-            ScalarVector3f direction(normalize(m_props.vector3f("direction")));
+            ScalarVector3f direction(normalize(props.vector3f("direction")));
             auto [up, unused] = coordinate_system(direction);
 
             m_world_transform =
@@ -172,24 +172,23 @@ public:
                     ScalarPoint3f(0.0f), ScalarPoint3f(direction), up));
         }
 
-        m_origin_center = m_props.point3f("origin_center");
-        m_origin_radius = m_props.float_("origin_radius");
-        m_origin_a = m_props.point3f("origin_a");
-        m_origin_b = m_props.point3f("origin_b");
-
         if constexpr (OriginType == RayOriginType::Disk) {
-            if (!m_props.has_property("origin_center") || !m_props.has_property("origin_radius")) {
+            if (!props.has_property("origin_center") || !props.has_property("origin_radius")) {
                 Throw("Circular origin requires the 'origin_center' and 'origin_radius' parameters");
             }
+            m_origin_center = props.point3f("origin_center");
+            m_origin_radius = props.float_("origin_radius");
             m_origin_area = math::Pi<Float> * sqr(m_origin_radius);
         } else if constexpr (OriginType == RayOriginType::Rectangle) {
-            if (!m_props.has_property("origin_a") || !m_props.has_property("origin_b")) {
+            if (!props.has_property("origin_a") || !props.has_property("origin_b")) {
                 Throw("Rectangular origin requires the 'origin_a' and 'origin_b' parameters");
             }
             if (!(m_origin_a.z() == m_origin_b.z())) {
                 Throw("z-components of origin_a and origin_b do not match. "
                       "Cannot determine origin zone elevation.");
             }
+            m_origin_a = props.point3f("origin_a");
+            m_origin_b = props.point3f("origin_b");
             m_origin_area = abs(m_origin_b.x()-m_origin_a.x()) * abs(m_origin_b.y()-m_origin_a.y());
         } else if constexpr (OriginType == RayOriginType::Distant) {
             m_origin_area = 0;
@@ -203,9 +202,9 @@ public:
             Log(Warn, "This sensor should be used with a reconstruction filter "
                       "with a radius of 0.5 or lower (e.g. default box)");
 
-        m_props.mark_queried("origin");
-        m_props.mark_queried("direction");
-        m_props.mark_queried("to_world");
+        props.mark_queried("origin");
+        props.mark_queried("direction");
+        props.mark_queried("to_world");
 
     }
 
@@ -257,7 +256,7 @@ public:
 
         ray.update();
         return std::make_pair(
-            ray, wav_weight * m_origin_area * Frame3f::cos_theta(ray.d));
+            ray, wav_weight * m_origin_area * Frame3f::cos_theta(-ray.d));
     }
 
     std::pair<RayDifferential3f, Spectrum> sample_ray_differential(
@@ -307,7 +306,7 @@ public:
 
         ray.update();
         return std::make_pair(
-            ray, wav_weight * origin_area * Frame3f::cos_theta(ray.d));
+            ray, wav_weight * origin_area * Frame3f::cos_theta(-ray.d));
     }
 
     /// This sensor does not occupy any particular region of space, return an
@@ -357,9 +356,7 @@ protected:
     Float m_origin_radius;
     Point3f m_origin_a;
     Point3f m_origin_b;
-    RayOriginType m_origin_type;
     Float m_origin_area;
-    Properties m_props;
 };
 
 MTS_IMPLEMENT_CLASS_VARIANT(DistantSensor, Sensor)

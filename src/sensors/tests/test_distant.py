@@ -40,7 +40,7 @@ def make_sensor(**kwargs):
     from mitsuba.core.xml import load_dict
     sensor_dict = dict_sensor(**kwargs)
     print(sensor_dict)
-    return load_dict(sensor_dict).expand()[0    ]
+    return load_dict(sensor_dict).expand()[0]
 
 
 def test_construct(variant_scalar_rgb):
@@ -48,7 +48,7 @@ def test_construct(variant_scalar_rgb):
 
     # Construct without parameters (wrong film size)
     with pytest.raises(RuntimeError):
-        sensor = load_dict({"type": "distant"})
+        sensor = load_dict({"type": "distant"}).expand()[0]
 
     # Construct with wrong film size
     with pytest.raises(RuntimeError):
@@ -180,17 +180,17 @@ def test_origin_area(variant_scalar_rgb, origin):
 @pytest.mark.parametrize("w_o", [[0, 0, -1], [0, 1, -1]])
 @pytest.mark.parametrize("origin", [
     {},
-    {"origin": "disk", "origin_center": [0,0,2], "origin_radius": 1},
+    {"origin": "disk", "origin_center": [0,0,2], "origin_radius": 2},
     {"origin": "rectangle", "origin_a": [-1,-1,2], "origin_b": [1,1,2]}
 ])
-def test_render(variant_scalar_rgb, w_e, w_o, origin):
+def test_render(variant_scalar_mono, w_e, w_o, origin):
     # Test render results with a simple scene
     from mitsuba.core.xml import load_dict
     from mitsuba.core import Bitmap, Struct, ScalarTransform4f
 
     l_e = 1.0  # Emitted radiance
-    w_e = list(ek.normalize(w_e))  # Emitter direction
-    w_o = list(ek.normalize(w_o))  # Sensor direction
+    w_e = list(w_e/np.linalg.norm(w_e))  # Emitter direction
+    w_o = list(w_o/np.linalg.norm(w_o))  # Sensor direction
     cos_theta_e = abs(ek.dot(w_e, [0, 0, 1]))
     cos_theta_o = abs(ek.dot(w_o, [0, 0, 1]))
 
@@ -230,12 +230,21 @@ def test_render(variant_scalar_rgb, w_e, w_o, origin):
         "integrator": {"type": "path"}
     }
 
+    # set the sensor origin such that rays hit the square
+    if origin == {}:
+        pass
+    elif origin["origin"] == "disk":
+        origin["origin_center"] = [-w_o[i]*2 for i in range(3)]
+    elif origin["origin"] == "rectangle":
+        origin["origin_a"] = [-1-w_o[0]*2, -1-w_o[1]*2, 0-w_o[2]*2]
+        origin["origin_b"] = [1-w_o[0]*2, 1-w_o[1]*2, 0-w_o[2]*2]
+
     dict_scene["sensor"] = {**dict_scene["sensor"], **origin}
-    print(dict_scene)
     scene = load_dict(dict_scene)
     sensor = scene.sensors()[0]
     scene.integrator().render(scene, sensor)
     img = np.array(sensor.film().bitmap()).squeeze()
-    assert np.allclose(np.array(img), expected)
+    assert np.allclose(np.array(img), expected, rtol=1e-3)
 
 
+     
