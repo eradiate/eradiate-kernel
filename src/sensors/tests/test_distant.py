@@ -189,7 +189,6 @@ def test_render(variant_scalar_mono, w_e, w_o, ray_origin):
     l_e = 1.0  # Emitted radiance
     w_e = list(w_e/np.linalg.norm(w_e))  # Emitter direction
     w_o = list(w_o/np.linalg.norm(w_o))  # Sensor direction
-    print(w_o)
     cos_theta_e = abs(ek.dot(w_e, [0, 0, 1]))
     cos_theta_o = abs(ek.dot(w_o, [0, 0, 1]))
 
