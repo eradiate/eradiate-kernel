@@ -6,25 +6,25 @@ import mitsuba
 
 
 def dict_sensor(direction=None, 
-                origin_type=None,
-                origin_center=[0,0,0] ,
-                origin_radius=0,
-                origin_a=[0,0,0],
-                origin_b=[0,0,0],
+                ray_origin_type=None,
+                ray_origin_center=[0,0,0] ,
+                ray_origin_radius=0,
+                ray_origin_a=[0,0,0],
+                ray_origin_b=[0,0,0],
                 fwidth=1):
-    result = {"type": "distant", "origin": "disk", "origin_radius": 0, "origin_center": [0,0,0]}
+    result = {"type": "distant", "ray_origin": "distant"}
 
     if direction:
         result["direction"] = direction
 
-    if origin_type == "disk":
-        result["origin"] = origin_type
-        result["origin_center"] = origin_center
-        result["origin_radius"] = origin_radius
-    elif origin_type =="rectangle":
-        result["origin"] = origin_type
-        result["origin_a"] = origin_a
-        result["origin_b"] = origin_b
+    if ray_origin_type == "disk":
+        result["ray_origin"] = ray_origin_type
+        result["ray_origin_center"] = ray_origin_center
+        result["ray_origin_radius"] = ray_origin_radius
+    elif ray_origin_type =="rectangle":
+        result["ray_origin"] = ray_origin_type
+        result["ray_origin_a"] = ray_origin_a
+        result["ray_origin_b"] = ray_origin_b
 
     result["film"] = {
         "type": "hdrfilm",
@@ -77,11 +77,11 @@ def test_construct(variant_scalar_rgb):
 
 
 @pytest.mark.parametrize("origin", [
-    {"origin_type": None},
-    {"origin_type": "disk", "origin_radius": 0, "origin_center": [0.0, 0.0, 0.0]},
-    {"origin_type": "disk", "origin_radius": 0.5, "origin_center": [4.0, 1.0, 0.0]},
-    {"origin_type": "rectangle", "origin_a": [0,0,0], "origin_b": [0,0,0]},
-    {"origin_type": "rectangle", "origin_a": [-1,-1,0], "origin_b": [1,1,0]}
+    {"ray_origin_type": None},
+    {"ray_origin_type": "disk", "ray_origin_radius": 0, "ray_origin_center": [0.0, 0.0, 0.0]},
+    {"ray_origin_type": "disk", "ray_origin_radius": 0.5, "ray_origin_center": [4.0, 1.0, 0.0]},
+    {"ray_origin_type": "rectangle", "ray_origin_a": [0,0,0], "ray_origin_b": [0,0,0]},
+    {"ray_origin_type": "rectangle", "ray_origin_a": [-1,-1,0], "ray_origin_b": [1,1,0]}
 ])
 @pytest.mark.parametrize("direction", [
     [0.0, 0.0, 1.0],
@@ -123,10 +123,10 @@ def make_scene(**kwargs):
 
 
 @pytest.mark.parametrize("origin", [
-    {"origin_type": "rectangle", "origin_a": [-1,-1,1], "origin_b": [1,1,1], "expected_invalid":0.},
-    {"origin_type": "rectangle", "origin_a": [-2,-2,2], "origin_b": [2,2,2], "expected_invalid":0.75},
-    {"origin_type": "disk", "origin_center": [0,0,1], "origin_radius": 1, "expected_invalid": 0},
-    {"origin_type": "disk", "origin_center": [0,0,2], "origin_radius": 2, "expected_invalid": 0.6816}
+    {"ray_origin_type": "rectangle", "ray_origin_a": [-1,-1,1], "ray_origin_b": [1,1,1], "expected_invalid":0.},
+    {"ray_origin_type": "rectangle", "ray_origin_a": [-2,-2,2], "ray_origin_b": [2,2,2], "expected_invalid":0.75},
+    {"ray_origin_type": "disk", "ray_origin_center": [0,0,1], "ray_origin_radius": 1, "expected_invalid": 0},
+    {"ray_origin_type": "disk", "ray_origin_center": [0,0,2], "ray_origin_radius": 2, "expected_invalid": 0.6816}
 ])
 def test_origin_area(variant_scalar_rgb, origin):
     """Test if the sensor correctly targets the expected area by computing
@@ -156,10 +156,10 @@ def test_origin_area(variant_scalar_rgb, origin):
         
     # Average intersection locations should be (in average) centered
     # around the origin specified
-    if origin["origin_type"] == "disk":
-        center = origin["origin_center"]
-    elif origin["origin_type"] == "rectangle":
-        center = (np.array(origin["origin_b"]) + np.array(origin["origin_a"])) / 2.
+    if origin["ray_origin_type"] == "disk":
+        center = origin["ray_origin_center"]
+    elif origin["ray_origin_type"] == "rectangle":
+        center = (np.array(origin["ray_origin_b"]) + np.array(origin["ray_origin_a"])) / 2.
 
     # Average intersection locations should be (in average) centered
     # around (0, 0, 0)
@@ -176,19 +176,20 @@ def test_origin_area(variant_scalar_rgb, origin):
 
 @pytest.mark.parametrize("w_e", [[0, 0, -1], [0, 1, -1]])
 @pytest.mark.parametrize("w_o", [[0, 0, -1], [0, 1, -1]])
-@pytest.mark.parametrize("origin", [
+@pytest.mark.parametrize("ray_origin", [
     {},
-    {"origin": "disk", "origin_center": [0,0,2], "origin_radius": 1},
-    {"origin": "rectangle", "origin_a": [-1,-1,2], "origin_b": [1,1,2]}
+    {"ray_origin": "disk", "ray_origin_center": [0,0,2], "ray_origin_radius": 1},
+    {"ray_origin": "rectangle", "ray_origin_a": [-1,-1,2], "ray_origin_b": [1,1,2]}
 ])
-def test_render(variant_scalar_mono, w_e, w_o, origin):
+def test_render(variant_scalar_mono, w_e, w_o, ray_origin):
     # Test render results with a simple scene
     from mitsuba.core.xml import load_dict
     from mitsuba.core import Bitmap, Struct, ScalarTransform4f
 
     l_e = 1.0  # Emitted radiance
-    w_e = list(ek.normalize(w_e))  # Emitter direction
-    w_o = list(ek.normalize(w_o))  # Sensor direction
+    w_e = list(w_e/np.linalg.norm(w_e))  # Emitter direction
+    w_o = list(w_o/np.linalg.norm(w_o))  # Sensor direction
+    print(w_o)
     cos_theta_e = abs(ek.dot(w_e, [0, 0, 1]))
     cos_theta_o = abs(ek.dot(w_o, [0, 0, 1]))
 
@@ -229,35 +230,37 @@ def test_render(variant_scalar_mono, w_e, w_o, origin):
     }
 
     # set the sensor origin such that rays hit the square
-    if not origin:
+    if not ray_origin:
         pass
-    elif origin["origin"] == "disk":
-        origin["origin_center"] = [-w_o[i]*2 for i in range(3)]
-    elif origin["origin"] == "rectangle":
-        origin["origin_a"] = [-1-w_o[0]*2, -1-w_o[1]*2, 0-w_o[2]*2]
-        origin["origin_b"] = [1-w_o[0]*2, 1-w_o[1]*2, 0-w_o[2]*2]
+    elif ray_origin["ray_origin"] == "disk":
+        ray_origin["ray_origin_center"] = [-w_o[i]*2 for i in range(3)]
+    elif ray_origin["ray_origin"] == "rectangle":
+        ray_origin["ray_origin_a"] = [-1-w_o[0]*2, -1-w_o[1]*2, 0-w_o[2]*2]
+        ray_origin["ray_origin_b"] = [1-w_o[0]*2, 1-w_o[1]*2, 0-w_o[2]*2]
 
-    dict_scene["sensor"] = {**dict_scene["sensor"], **origin}
+    dict_scene["sensor"] = {**dict_scene["sensor"], **ray_origin}
     scene = load_dict(dict_scene)
 
-    if not origin:
-        origin_area = 2 * np.pi
-    elif origin["origin"] == "disk":
-        origin_area = (origin["origin_radius"]**2) * np.pi
-    elif origin["origin"] =="rectangle":
-        origin_a = origin["origin_a"]
-        origin_b = origin["origin_b"]
-        origin_area = abs(origin_a[0] - origin_b[0]) *  abs(origin_a[1] - origin_b[1])
+    # if the ray origin area does not exactly cover the surface in the scene,
+    # the expected recorded radiance has to be corrected
+    if not ray_origin:
+        ray_origin_area = 2 * np.pi
+    elif ray_origin["ray_origin"] == "disk":
+        ray_origin_area = (ray_origin["ray_origin_radius"]**2) * np.pi
+    elif ray_origin["ray_origin"] =="rectangle":
+        ray_origin_a = ray_origin["ray_origin_a"]
+        ray_origin_b = ray_origin["ray_origin_b"]
+        ray_origin_area = abs(ray_origin_a[0] - ray_origin_b[0]) *  abs(ray_origin_a[1] - ray_origin_b[1])
     
-    if origin_area >= surface_area:
-        ratio = surface_area / origin_area
+    if ray_origin_area >= surface_area:
+        ratio = surface_area / ray_origin_area
     else:
-        ratio = origin_area / surface_area
+        ratio = ray_origin_area / surface_area
 
     sensor = scene.sensors()[0]
     scene.integrator().render(scene, sensor)
     img = np.array(sensor.film().bitmap()).squeeze()
-    assert np.allclose(np.array(img), expected * ratio)
+    assert np.allclose(np.array(img), expected * ratio, rtol=1e-3)
 
 
      
