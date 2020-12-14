@@ -170,17 +170,17 @@ public:
 
         if constexpr (OriginType == RayOriginType::Disk) {
             if (!props.has_property("ray_origin_center") || !props.has_property("ray_origin_radius")) {
-                Throw("Circular ray_origin requires the 'ray_origin_center' and 'ray_origin_radius' parameters");
+                Throw("RayOriginType::Disk requires the 'm_ray_origin_center' and 'm_ray_origin_radius' parameters");
             }
             m_ray_origin_center = props.point3f("ray_origin_center");
             m_ray_origin_radius = props.float_("ray_origin_radius");
             m_ray_origin_area = math::Pi<Float> * sqr(m_ray_origin_radius);
         } else if constexpr (OriginType == RayOriginType::Rectangle) {
             if (!props.has_property("ray_origin_a") || !props.has_property("ray_origin_b")) {
-                Throw("Rectangular ray_origin requires the 'ray_origin_a' and 'ray_origin_b' parameters");
+                Throw("RayOriginType::Rectangle requires the 'm_ray_origin_a' and 'm_ray_origin_b' parameters");
             }
             if (!(m_ray_origin_a.z() == m_ray_origin_b.z())) {
-                Throw("z-components of ray_origin_a and ray_origin_b do not match. "
+                Throw("z-components of m_ray_origin_a and m_ray_origin_b do not match. "
                       "Cannot determine ray_origin zone elevation.");
             }
             m_ray_origin_a = props.point3f("ray_origin_a");
