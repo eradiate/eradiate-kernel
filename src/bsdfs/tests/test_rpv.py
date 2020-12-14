@@ -7,10 +7,10 @@ import mitsuba
 
 def test_create_rpv3(variant_scalar_rgb):
     # Test constructor of 3-parameter version of RPV
-    from mitsuba.core.xml import load_string
+    from mitsuba.core.xml import load_dict
     from mitsuba.render import BSDFFlags
 
-    rpv = load_string("<bsdf version='2.0.0' type='rpv'/>")
+    rpv = load_dict({"type": "rpv"})
     assert rpv is not None
     assert rpv.component_count() == 1
     assert rpv.flags(0) == BSDFFlags.GlossyReflection | BSDFFlags.FrontSide
@@ -32,7 +32,7 @@ def test_chi2_rpv3(variant_packet_rgb):
     assert chi2.run()
 
 
-def rpv_reference(rho_0, rho_0_hotspot, theta, k,
+def rpv_reference(rho_0, rho_0_hotspot, g, k,
                   theta_i, phi_i, theta_o, phi_o):
     """Reference for RPV, adapted from a C implementation."""
 
@@ -46,8 +46,8 @@ def rpv_reference(rho_0, rho_0_hotspot, theta, k,
 
     cos_g = ui * uo + sini * sino * cosphi
 
-    FgDenum = 1. + theta * theta + 2. * theta * cos_g
-    Fg = (1. - theta * theta) / ek.pow(FgDenum, 1.5)
+    FgDenum = 1. + g * g + 2. * g * cos_g
+    Fg = (1. - g * g) / ek.pow(FgDenum, 1.5)
 
     G = ek.sqrt(tan_i * tan_i + tan_o * tan_o - 2. * tan_i * tan_o * cosphi)
     K3 = 1. + (1. - rho_0_hotspot) / (1. + G)
@@ -57,22 +57,21 @@ def rpv_reference(rho_0, rho_0_hotspot, theta, k,
 
 @pytest.mark.parametrize("rho_0", [0.1, 0.497, 0.004])
 @pytest.mark.parametrize("k", [0.543, 0.851, 0.634])
-@pytest.mark.parametrize("theta", [-0.29, 0.086, 0.2])
-def test_eval(variant_scalar_rgb, rho_0, k, theta):
+@pytest.mark.parametrize("g", [-0.29, 0.086, 0.2])
+def test_eval(variant_scalar_rgb, rho_0, k, g):
     """Test the eval method of the RPV plugin, comparing to a reference 
     implementation."""
 
-    from mitsuba.core.xml import load_string
+    from mitsuba.core.xml import load_dict
     from mitsuba.core import Vector3f
     from mitsuba.render import BSDFContext, SurfaceInteraction3f
 
-    rpv = load_string(f"""
-    <bsdf version="2.0.0" type="rpv">
-        <float name="rho_0" value="{rho_0}"/>
-        <float name="k" value="{k}"/>
-        <float name="ttheta" value="{theta}"/>
-    </bsdf>""")
-
+    rpv = load_dict({
+        "type": "rpv",
+        "k": k,
+        "rho_0": rho_0,
+        "g": g
+    })
     num_samples = 100
 
     theta_i = np.random.rand(num_samples) * np.pi / 2.
@@ -99,6 +98,6 @@ def test_eval(variant_scalar_rgb, rho_0, k, theta):
 
         value.append(rpv.eval(ctx, si, wo, True)[0])
 
-        reference.append(rpv_reference(rho_0, rho_0, theta, k, ti, pi, to, po))
+        reference.append(rpv_reference(rho_0, rho_0, g, k, ti, pi, to, po))
 
     assert ek.allclose(value, reference, rtol=1e-3, atol=1e-3)

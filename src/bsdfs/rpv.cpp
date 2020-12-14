@@ -24,18 +24,12 @@ Rahman Pinty Verstraete reflection model (:monosp:`RPV`)
  * - k
    - |spectrum| or |texture|
    - :math:`k \in \mathbb{R}`. Default: 0.1
- * - ttheta
+ * - g
    - |spectrum| or |texture|
-   - :math:`-1 \le \Theta \le 1`. Default: 0.0
+   - :math:`-1 \le g \le 1`. Default: 0.0
  * - rho_c
    - |spectrum| or |texture|
    - Default: Equal to rho_0
- * - sigma
-   - |spectrum| or |texture|
-   - Default: 0.0
- * - delta
-   - |spectrum| or |texture|
-   - Default: 1.0
 
 This plugin implements the reflection model proposed by
 :cite:`Rahman1993CoupledSurfaceatmosphereReflectance`.
@@ -57,27 +51,6 @@ Scientific Handbook.
 
   If not given, it defaults to :math:`\rho_0`, yielding the fundamental
   version of the formula.
-- Parameter :math:`\delta`:
-
-  :math:`1 + R(G) = 1 + \frac{1 - \rho_0}{\delta + G}`
-
-  If not given, it defaults to :math:`1`, yielding the fundamental version of
-  the formula.
-- Parameter :math:`\sigma`:
-
-  .. math::
-
-     \rho_s = \rho_0
-        \left[
-            \frac{
-              \cos^{k-1} \theta_1 \cos^{k-1} \theta_2
-            }{
-              (\cos \theta_1 + \cos \theta_2)^{1-k}
-            } \cdot F(g) [1 + R(G)] + \frac{\sigma}{\cos \theta_1}
-        \right]
-
-  If not given, it defaults to :math:`0`, yielding the fundamental version
-  of the formula.
 
 Note that this material is one-sided, that is, observed from the
 back side, it will be completely black. If this is undesirable,
@@ -91,7 +64,7 @@ parameters:
     <bsdf type="rpv">
         <float name="rho_0" value="0.02"/>
         <float name="k" value="0.3"/>
-        <float name="ttheta" value="-0.12"/>
+        <float name="g" value="-0.12"/>
     </bsdf>
 
 */
@@ -104,10 +77,8 @@ public:
 
     RPV(const Properties &props) : Base(props) {
         m_rho_0  = props.texture<Texture>("rho_0", 0.1f);
-        m_ttheta = props.texture<Texture>("ttheta", 0.f);
+        m_g = props.texture<Texture>("g", 0.f);
         m_k      = props.texture<Texture>("k", 0.1f);
-        m_sigma  = props.texture<Texture>("sigma", 0.0f);
-        m_delta  = props.texture<Texture>("delta", 1.0f);
         if (props.has_property("rho_c")) {
             m_rho_c = props.texture<Texture>("rho_c", 0.1f);
         } else {
@@ -143,10 +114,8 @@ public:
                       Mask active) const {
         Spectrum rho_0  = m_rho_0->eval(si, active);
         Spectrum rho_c  = m_rho_c->eval(si, active);
-        Spectrum ttheta = m_ttheta->eval(si, active);
+        Spectrum g      = m_g->eval(si, active);
         Spectrum k      = m_k->eval(si, active);
-        Spectrum delta  = m_delta->eval(si, active);
-        Spectrum sigma  = m_sigma->eval(si, active);
 
         auto [sin_phi1, cos_phi1] = Frame3f::sincos_phi(si.wi);
         auto [sin_phi2, cos_phi2] = Frame3f::sincos_phi(wo);
@@ -164,14 +133,13 @@ public:
         Float cos_g = cos_theta1 * cos_theta2 +
                       sin_theta1 * sin_theta2 * cos_phi1_minus_phi2;
         // the following uses cos(\pi-x) = -cos(x)
-        Spectrum F = (1.f - sqr(ttheta)) /
-                     pow((1.f + sqr(ttheta) + 2.f * ttheta * cos_g), 1.5f);
+        Spectrum F = (1.f - sqr(g)) /
+                     pow((1.f + sqr(g) + 2.f * g * cos_g), 1.5f);
 
         Spectrum value =
             rho_0 *
             (pow(cos_theta1 * cos_theta2 * (cos_theta1 + cos_theta2), k - 1.f) *
-                 F * (1.f + (1.f - rho_c) / (delta + G)) +
-             sigma / cos_theta1);
+                 F * (1.f + (1.f - rho_c) / (1 + G)));
 
         return value;
     }
@@ -204,22 +172,18 @@ public:
 
     void traverse(TraversalCallback *callback) override {
         callback->put_object("rho_0", m_rho_0.get());
-        callback->put_object("ttheta", m_ttheta.get());
+        callback->put_object("g", m_g.get());
         callback->put_object("k", m_k.get());
         callback->put_object("rho_c", m_rho_c.get());
-        callback->put_object("delta", m_delta.get());
-        callback->put_object("sigma", m_sigma.get());
     }
 
     std::string to_string() const override {
         std::ostringstream oss;
         oss << "RPV[" << std::endl
             << "  rho_0 = " << string::indent(m_rho_0) << std::endl
-            << "  ttheta = " << string::indent(m_ttheta) << std::endl
+            << "  g = " << string::indent(m_g) << std::endl
             << "  k = " << string::indent(m_k) << std::endl
             << "  rho_c = " << string::indent(m_rho_c) << std::endl
-            << "  delta = " << string::indent(m_delta) << std::endl
-            << "  sigma = " << string::indent(m_sigma) << std::endl
             << "]";
         return oss.str();
     }
@@ -227,11 +191,9 @@ public:
     MTS_DECLARE_CLASS()
 private:
     ref<Texture> m_rho_0;
-    ref<Texture> m_ttheta;
+    ref<Texture> m_g;
     ref<Texture> m_k;
     ref<Texture> m_rho_c;
-    ref<Texture> m_sigma;
-    ref<Texture> m_delta;
 };
 
 MTS_IMPLEMENT_CLASS_VARIANT(RPV, BSDF)
