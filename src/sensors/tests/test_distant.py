@@ -39,7 +39,6 @@ def dict_sensor(direction=None,
 def make_sensor(**kwargs):
     from mitsuba.core.xml import load_dict
     sensor_dict = dict_sensor(**kwargs)
-    print(sensor_dict)
     return load_dict(sensor_dict).expand()[0]
 
 
@@ -166,7 +165,6 @@ def test_origin_area(variant_scalar_rgb, origin):
     # around (0, 0, 0)
     isect_valid = isect[~np.isnan(isect).all(axis=1)]
     mean_location = isect_valid.mean(axis=0)
-    print(mean_location)
     assert np.allclose(mean_location[0], center[0], atol=5e-2)
     assert np.allclose(mean_location[1], center[1], atol=5e-2)
     assert np.allclose(mean_location[2], 0., atol=5e-2)
@@ -180,7 +178,7 @@ def test_origin_area(variant_scalar_rgb, origin):
 @pytest.mark.parametrize("w_o", [[0, 0, -1], [0, 1, -1]])
 @pytest.mark.parametrize("origin", [
     {},
-    {"origin": "disk", "origin_center": [0,0,2], "origin_radius": 2},
+    {"origin": "disk", "origin_center": [0,0,2], "origin_radius": 1},
     {"origin": "rectangle", "origin_a": [-1,-1,2], "origin_b": [1,1,2]}
 ])
 def test_render(variant_scalar_mono, w_e, w_o, origin):
@@ -189,12 +187,12 @@ def test_render(variant_scalar_mono, w_e, w_o, origin):
     from mitsuba.core import Bitmap, Struct, ScalarTransform4f
 
     l_e = 1.0  # Emitted radiance
-    w_e = list(w_e/np.linalg.norm(w_e))  # Emitter direction
-    w_o = list(w_o/np.linalg.norm(w_o))  # Sensor direction
+    w_e = list(ek.normalize(w_e))  # Emitter direction
+    w_o = list(ek.normalize(w_o))  # Sensor direction
     cos_theta_e = abs(ek.dot(w_e, [0, 0, 1]))
     cos_theta_o = abs(ek.dot(w_o, [0, 0, 1]))
 
-    scale = 0.5
+    scale = 1
     rho = 1.0  # Surface reflectance
     surface_area = 4. * scale ** 2
 
@@ -231,7 +229,7 @@ def test_render(variant_scalar_mono, w_e, w_o, origin):
     }
 
     # set the sensor origin such that rays hit the square
-    if origin == {}:
+    if not origin:
         pass
     elif origin["origin"] == "disk":
         origin["origin_center"] = [-w_o[i]*2 for i in range(3)]
@@ -241,10 +239,25 @@ def test_render(variant_scalar_mono, w_e, w_o, origin):
 
     dict_scene["sensor"] = {**dict_scene["sensor"], **origin}
     scene = load_dict(dict_scene)
+
+    if not origin:
+        origin_area = 2 * np.pi
+    elif origin["origin"] == "disk":
+        origin_area = (origin["origin_radius"]**2) * np.pi
+    elif origin["origin"] =="rectangle":
+        origin_a = origin["origin_a"]
+        origin_b = origin["origin_b"]
+        origin_area = abs(origin_a[0] - origin_b[0]) *  abs(origin_a[1] - origin_b[1])
+    
+    if origin_area >= surface_area:
+        ratio = surface_area / origin_area
+    else:
+        ratio = origin_area / surface_area
+
     sensor = scene.sensors()[0]
     scene.integrator().render(scene, sensor)
     img = np.array(sensor.film().bitmap()).squeeze()
-    assert np.allclose(np.array(img), expected, rtol=1e-3)
+    assert np.allclose(np.array(img), expected * ratio)
 
 
      
