@@ -12,17 +12,17 @@ def dict_sensor(direction=None,
                 ray_origin_a=[0,0,0],
                 ray_origin_b=[0,0,0],
                 fwidth=1):
-    result = {"type": "distant", "ray_origin": "distant"}
+    result = {"type": "distant", "ray_origin_type": "distant"}
 
     if direction:
         result["direction"] = direction
 
     if ray_origin_type == "disk":
-        result["ray_origin"] = ray_origin_type
+        result["ray_origin_type"] = ray_origin_type
         result["ray_origin_center"] = ray_origin_center
         result["ray_origin_radius"] = ray_origin_radius
     elif ray_origin_type =="rectangle":
-        result["ray_origin"] = ray_origin_type
+        result["ray_origin_type"] = ray_origin_type
         result["ray_origin_a"] = ray_origin_a
         result["ray_origin_b"] = ray_origin_b
 
@@ -178,8 +178,8 @@ def test_origin_area(variant_scalar_rgb, origin):
 @pytest.mark.parametrize("w_o", [[0, 0, -1], [0, 1, -1]])
 @pytest.mark.parametrize("ray_origin", [
     {},
-    {"ray_origin": "disk", "ray_origin_center": [0,0,2], "ray_origin_radius": 1},
-    {"ray_origin": "rectangle", "ray_origin_a": [-1,-1,2], "ray_origin_b": [1,1,2]}
+    {"ray_origin_type": "disk", "ray_origin_center": [0,0,2], "ray_origin_radius": 1},
+    {"ray_origin_type": "rectangle", "ray_origin_a": [-1,-1,2], "ray_origin_b": [1,1,2]}
 ])
 def test_render(variant_scalar_mono, w_e, w_o, ray_origin):
     # Test render results with a simple scene
@@ -222,7 +222,7 @@ def test_render(variant_scalar_mono, w_e, w_o, ray_origin):
             },
             "sampler": {
                 "type": "independent",
-                "sample_count": 512
+                "sample_count": 51200
             },
         },
         "integrator": {"type": "path"}
@@ -231,9 +231,9 @@ def test_render(variant_scalar_mono, w_e, w_o, ray_origin):
     # set the sensor origin such that rays hit the square
     if not ray_origin:
         pass
-    elif ray_origin["ray_origin"] == "disk":
+    elif ray_origin["ray_origin_type"] == "disk":
         ray_origin["ray_origin_center"] = [-w_o[i]*2 for i in range(3)]
-    elif ray_origin["ray_origin"] == "rectangle":
+    elif ray_origin["ray_origin_type"] == "rectangle":
         ray_origin["ray_origin_a"] = [-1-w_o[0]*2, -1-w_o[1]*2, 0-w_o[2]*2]
         ray_origin["ray_origin_b"] = [1-w_o[0]*2, 1-w_o[1]*2, 0-w_o[2]*2]
 
@@ -244,9 +244,9 @@ def test_render(variant_scalar_mono, w_e, w_o, ray_origin):
     # the expected recorded radiance has to be corrected
     if not ray_origin:
         ray_origin_area = 2 * np.pi
-    elif ray_origin["ray_origin"] == "disk":
+    elif ray_origin["ray_origin_type"] == "disk":
         ray_origin_area = (ray_origin["ray_origin_radius"]**2) * np.pi
-    elif ray_origin["ray_origin"] =="rectangle":
+    elif ray_origin["ray_origin_type"] =="rectangle":
         ray_origin_a = ray_origin["ray_origin_a"]
         ray_origin_b = ray_origin["ray_origin_b"]
         ray_origin_area = abs(ray_origin_a[0] - ray_origin_b[0]) *  abs(ray_origin_a[1] - ray_origin_b[1])
@@ -259,7 +259,7 @@ def test_render(variant_scalar_mono, w_e, w_o, ray_origin):
     sensor = scene.sensors()[0]
     scene.integrator().render(scene, sensor)
     img = np.array(sensor.film().bitmap()).squeeze()
-    assert np.allclose(np.array(img), expected * ratio, rtol=1e-3)
+    assert np.allclose(np.array(img), expected, rtol=1e-3)
 
 
      
