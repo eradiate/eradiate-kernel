@@ -201,7 +201,6 @@ public:
 
     }
 
-
     void set_scene(const Scene *scene) override {
         m_bsphere = scene->bbox().bounding_sphere();
         m_bsphere.radius =
@@ -216,6 +215,15 @@ public:
         } else {
             NotImplementedError("Unsupported RayOriginType");
         }
+
+        // rays must begin outside of the bounding box
+        // to ensure that, we trace a ray from the bbox' xy-center
+        // and z=0 plane until its z component is larger than 
+        // the maximum value of bbox' z component plus a margin of 10 percent
+        auto trafo          = m_world_transform->eval(0.f, true);
+        Vector3f direction  = -trafo.transform_affine(Vector3f{ 0.f, 0.f, 1.f });
+        Float bbox_zmax     = scene->bbox().max.z() * 1.1f;
+        m_ray_origin_length = bbox_zmax / direction.z();
     }
 
     std::pair<Ray3f, Spectrum> sample_ray(Float time, Float wavelength_sample,
@@ -245,20 +253,24 @@ public:
                 warp::square_to_uniform_disk_concentric(aperture_sample);
             Vector3f perp_offset =
                 trafo.transform_affine(Vector3f{ offset.x(), offset.y(), 0.f });
-            ray.o = m_bsphere.center + (perp_offset - ray.d) * m_bsphere.radius;
+            Point3f ray_target = m_bsphere.center + perp_offset * m_bsphere.radius;
+            ray.o = ray_target - ray.d * m_ray_origin_length;
             ray_weight = wav_weight * m_ray_origin_area;
         } 
         if constexpr (OriginType == RayOriginType::Rectangle) {
             Float ray_origin_x = abs(m_ray_origin_b.x() - m_ray_origin_a.x()) * aperture_sample.x() + min(m_ray_origin_a.x(), m_ray_origin_b.x());
             Float ray_origin_y = abs(m_ray_origin_b.y() - m_ray_origin_a.y()) * aperture_sample.y() + min(m_ray_origin_a.y(), m_ray_origin_b.y());
-            ray.o = Point3f{ray_origin_x, ray_origin_y, m_ray_origin_a.z()};
+            Point3f ray_target = Point3f{ray_origin_x, ray_origin_y, m_ray_origin_a.z()};
+            ray.o = ray_target - ray.d * m_ray_origin_length;
             ray_weight = wav_weight * m_ray_origin_area * Frame3f::cos_theta(-ray.d);
         }
         if constexpr (OriginType == RayOriginType::Disk) {
             Point2f disk_sample = Point2f(warp::square_to_uniform_disk(aperture_sample)) * m_ray_origin_radius;
             Point3f sample_disk = Point3f(disk_sample.x(), disk_sample.y(), 0.f) + m_ray_origin_center;
-            ray.o = Point3f{sample_disk.x(), sample_disk.y(), m_ray_origin_center.z()};
-            ray_weight = wav_weight * m_ray_origin_area * Frame3f::cos_theta(-ray.d);
+            Point3f ray_target = Point3f{sample_disk.x(), sample_disk.y(), m_ray_origin_center.z()};
+            ray.o = ray_target - ray.d * m_ray_origin_length;
+            // Log(Warn, "Ray origin: %s", ray.o);
+            ray_weight = wav_weight * 1 * Frame3f::cos_theta(-ray.d);
         }
 
         ray.update();
@@ -291,20 +303,23 @@ public:
                 warp::square_to_uniform_disk_concentric(aperture_sample);
             Vector3f perp_offset =
                 trafo.transform_affine(Vector3f{ offset.x(), offset.y(), 0.f });
-            ray.o = m_bsphere.center + (perp_offset - ray.d) * m_bsphere.radius;
+            Point3f ray_target = m_bsphere.center + perp_offset * m_bsphere.radius;
+            ray.o = ray_target - ray.d * m_ray_origin_length;
             ray_weight = wav_weight * m_ray_origin_area;
         } 
         if constexpr (OriginType == RayOriginType::Rectangle) {
             Float ray_origin_x = abs(m_ray_origin_b.x() - m_ray_origin_a.x()) * aperture_sample.x() + min(m_ray_origin_a.x(), m_ray_origin_b.x());
             Float ray_origin_y = abs(m_ray_origin_b.y() - m_ray_origin_a.y()) * aperture_sample.y() + min(m_ray_origin_a.y(), m_ray_origin_b.y());
-            ray.o = Point3f{ray_origin_x, ray_origin_y, m_ray_origin_a.z()};
+            Point3f ray_target = Point3f{ray_origin_x, ray_origin_y, m_ray_origin_a.z()};
+            ray.o = ray_target - ray.d * m_ray_origin_length;
             ray_weight = wav_weight * m_ray_origin_area * Frame3f::cos_theta(-ray.d);
         }
         if constexpr (OriginType == RayOriginType::Disk) {
             Point2f disk_sample = Point2f(warp::square_to_uniform_disk(aperture_sample)) * m_ray_origin_radius;
-            Point3f sample_disk = Point3f(disk_sample.x(), disk_sample.y(), 0.f) + m_ray_origin_center;
-            ray.o = Point3f{sample_disk.x(), sample_disk.y(), m_ray_origin_center.z()};
-            ray_weight = wav_weight * m_ray_origin_area * Frame3f::cos_theta(-ray.d);
+            Point3f ray_target = Point3f(disk_sample.x(), disk_sample.y(), 0.f) + m_ray_origin_center;
+            ray.o = ray_target - ray.d * m_ray_origin_length;
+            // Log(Warn, "Ray origin: %s", ray.o);
+            ray_weight = wav_weight * 1 * Frame3f::cos_theta(-ray.d);
         }
         
         // 4. Set differentials; since the film size is always 1x1, we don't
@@ -361,6 +376,7 @@ protected:
     Point3f m_ray_origin_a;
     Point3f m_ray_origin_b;
     Float m_ray_origin_area;
+    Float m_ray_origin_length;
 };
 
 MTS_IMPLEMENT_CLASS_VARIANT(DistantSensor, Sensor)
