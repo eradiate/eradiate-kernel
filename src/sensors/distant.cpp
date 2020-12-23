@@ -6,11 +6,12 @@
 #include <mitsuba/core/warp.h>
 #include <mitsuba/render/scene.h>
 #include <mitsuba/render/sensor.h>
+#include <mitsuba/render/shape.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
 enum class RayTargetType {Distant, Rectangle, Disk};
-enum class RayOriginType {Shape, Rectangle, Disk};
+enum class RayOriginType {Shape, Rectangle, Disk, None};
 
 // Forward declaration of specialized DistantSensor
 template <typename Float, typename Spectrum, RayTargetType TargetType>
@@ -54,6 +55,31 @@ Distant directional sensor (:monosp:`distant`)
  * - ray_target_radius
    - |float|
    - Radius for the circular ray target area
+ * - ray_origin_type
+   - |string|
+   - Specify the ray origin validation strategy.
+     If set to ``rectangle`` the parameters `ray_origin_a`` and ``ray_origin_b``
+     will specify a rectangular area aligned with the xy-plane..
+     If set to ``disk`` the parameters ``ray_origin_center`` and ``ray_origin_radius``
+     will specfiy a xy-plane aligned disk.
+     Upon ray sampling, a ray will be cast from the sampled target point
+     in the inverse sensor direction. If this ray intersects with the
+     specified origin area, the ray is valid. Otherwise the application
+     will throw an error.
+ * - ray_origin_a
+   - |point|
+   - Coordinates in the xy-plane for the rectangular ray origin area.
+ * - ray_origin_b
+   - |point|
+   - Maximum coordinates in the xy-plane for the rectangular ray origin area.
+ * - ray_origin_center
+   - |point|
+   - Center point in the xy-plane for the circular ray origin area.
+ * - ray_origin_radius
+   - |float|
+   - Radius for the circular ray origin area
+ * - ray_origin_shape
+   - Currently unsupported!
     
 
 This sensor plugin implements a distant directional sensor which records
@@ -86,7 +112,7 @@ template <typename Float, typename Spectrum>
 class DistantSensor final : public Sensor<Float, Spectrum> {
 public:
     MTS_IMPORT_BASE(Sensor, m_world_transform, m_film)
-    MTS_IMPORT_TYPES()
+    MTS_IMPORT_TYPES(Shape)
 
     DistantSensor(const Properties &props) : Base(props), m_props(props) {
 
@@ -142,7 +168,7 @@ public:
                 result = (Object *) new Impl<RayTargetType::Distant>(m_props);
                 break;
             default:
-                Throw("Unsupported ray origin type!");
+                Throw("Unsupported ray target type!");
         }
         return { result };
     }
@@ -158,7 +184,7 @@ template <typename Float, typename Spectrum, RayTargetType TargetType>
 class DistantSensorImpl final : public Sensor<Float, Spectrum> {
 public:
     MTS_IMPORT_BASE(Sensor, m_world_transform, m_film)
-    MTS_IMPORT_TYPES(Scene)
+    MTS_IMPORT_TYPES(Scene, Shape)
 
     DistantSensorImpl(const Properties &props) : Base(props) {
 
@@ -197,7 +223,7 @@ public:
             NotImplementedError("Unsupported RayTargetType");
         }
         
-        std::string origin_type = props.string("ray_origin_type", "disk");
+        std::string origin_type = props.string("ray_origin_type", "none");
 
         // set ray origin type for ray validity checks
         if (origin_type == "disk") {
@@ -205,9 +231,12 @@ public:
         } else if (origin_type == "rectangle") {
             m_ray_origin_type = RayOriginType::Rectangle;
         } else if (origin_type == "shape") {
-            m_ray_origin_type = RayOriginType::Shape
+            Throw("Using a Shape plugin for ray origin validation is currently unsupported!");
+            m_ray_origin_type = RayOriginType::Shape;
+        } else if (origin_type == "none") {
+            m_ray_origin_type = RayOriginType::None;
         } else {
-            Throw("Unknown ray origin type: %s", origin_type);
+            Throw("Unknown ray origin type.");
         }
 
         if (m_ray_origin_type == RayOriginType::Disk) {
@@ -218,11 +247,12 @@ public:
             m_ray_origin_b      = props.point3f("ray_origin_b");
         } else if (m_ray_origin_type == RayOriginType::Shape) {
             for (auto &[name, obj] : props.objects(false)) {
-                ray_origin_shape = dynamic_cast<Shape * >(obj.get());
+                Shape *ray_origin_shape = dynamic_cast<Shape *>(obj.get());
 
-                if (ray_origin_shape)
+                if (ray_origin_shape) {
                     m_ray_origin_shape = ray_origin_shape;
-                    props.mark_queried("ray_origin_shape")
+                    props.mark_queried("ray_origin_shape");
+                }
             }
             if (!m_ray_origin_shape){
                 Throw("Could not instantiate a shape for ray origins.");
@@ -272,36 +302,37 @@ public:
         }
     }
 
-    bool validate_ray(Point3f ray_target, Vector3f ray_direction) {
-        if (m_ray_origin_type == RayTargetType::Disk) {
+    bool validate_ray(const Point3f &ray_target, const Vector3f &ray_direction) const {
+        if (m_ray_origin_type == RayOriginType::Disk) {
                 Float ray_valid_distance = abs(m_ray_origin_center.z() / ray_direction.z());
                 Point3f ray_valid_point = ray_target - ray_direction * ray_valid_distance;
                 if (sqrt(sqr(ray_valid_point.x()) + sqr(ray_valid_point.y())) > m_ray_origin_radius){
-                    return false
-                } else { return true }
-        } else if (m_ray_origin_type == RayTargetType::Rectangle) {
+                    return false;
+                } else { return true; }
+        } else if (m_ray_origin_type == RayOriginType::Rectangle) {
             Float ray_valid_distance = abs(m_ray_origin_a.z() / ray_direction.z());
             Point3f ray_valid_point = ray_target - ray_direction * ray_valid_distance;
             if (ray_valid_point.x() < min(m_ray_origin_a.x(), m_ray_origin_b.x()) or
                 ray_valid_point.x() > max(m_ray_origin_a.x(), m_ray_origin_b.x()) or
                 ray_valid_point.y() < min(m_ray_origin_a.y(), m_ray_origin_b.y()) or
                 ray_valid_point.y() > max(m_ray_origin_a.y(), m_ray_origin_b.y())) {
-                    return false
-                } else { return true }
+                    return false;
+                } else { return true; }
         } else if (m_ray_origin_type == RayOriginType::Shape) {
             Ray3f test_ray;
             test_ray.time = 0.f;
             test_ray.o = ray_target;
             test_ray.d = -ray_direction;
             if (!m_ray_origin_shape->ray_test(test_ray, true)){
-                return false
-            } else {return true}
+                return false;
+            } else {return true;}
+        } else if (m_ray_origin_type == RayOriginType::None) {
+            return true;
         } else {
-            Throw("Unsupported ray origin type: %s", m_ray_origin_type);
-            return false
+            Throw("Unsupported ray origin type.");
         }
+        return false;
     }
-    // won't compile. why? :O
 
     std::pair<Ray3f, Spectrum> sample_ray(Float time, Float wavelength_sample,
                                           const Point2f & /*film_sample*/,
@@ -482,8 +513,8 @@ protected:
     Float m_ray_origin_radius;
     Point3f m_ray_origin_a;
     Point3f m_ray_origin_b;
-    RayTargetType m_ray_origin_type;
-    Shape *m_origin_shape;
+    RayOriginType m_ray_origin_type;
+    ref<Shape> m_ray_origin_shape;
 };
 
 MTS_IMPLEMENT_CLASS_VARIANT(DistantSensor, Sensor)
