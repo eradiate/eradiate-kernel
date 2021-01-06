@@ -30,7 +30,7 @@ changes.
    - Filename of the volume data file to be loaded
 
  * - use_grid_bbox
-   - |boolean|
+   - |bool|
    - If True, use the bounding box information contained in the 
      loaded file. (Default: False)
 
@@ -455,9 +455,9 @@ MTS_IMPLEMENT_CLASS_VARIANT(GridVolumeSpectral, Volume)
 MTS_EXPORT_PLUGIN(GridVolumeSpectral, "GridVolumeSpectral texture")
 
 NAMESPACE_BEGIN(detail)
-template <SpectrumType SpecType> constexpr const char *gridvolume_class_name() {
-    // if constexpr (SpecType == SpectrumType::Regular)
-    return "GridVolumeSpectralImpl_Regular";
+template <SpectrumType SpecType> constexpr const char *gridvolume_spectral_class_name() {
+    if constexpr (SpecType == SpectrumType::Regular)
+        return "GridVolumeSpectralImpl_Regular";
     // else if constexpr (SpecType == SpectrumType::Irregular)
     //     return "GridVolumeSpectralImpl_Irregular";
     // else
@@ -467,7 +467,7 @@ NAMESPACE_END(detail)
 
 template <typename Float, typename Spectrum, SpectrumType SpecType>
 Class *GridVolumeSpectralImpl<Float, Spectrum, SpecType>::m_class = new Class(
-    detail::gridvolume_class_name<SpecType>(), "Volume",
+    detail::gridvolume_spectral_class_name<SpecType>(), "Volume",
     ::mitsuba::detail::get_variant<Float, Spectrum>(), nullptr, nullptr);
 
 template <typename Float, typename Spectrum, SpectrumType SpecType>
