@@ -4,10 +4,11 @@ import pytest
 import enoki as ek
 
 
-def sensor_dict(ray_target=None, ray_origin=None, film="default", direction=None):
+def sensor_dict(ray_target=None, ray_origin=None, film="1x1",
+                direction=None, orientation=None):
     result = {"type": "distant"}
 
-    if film == "default":
+    if film == "1x1":
         result.update({
             "film": {
                 "type": "hdrfilm",
@@ -17,8 +18,31 @@ def sensor_dict(ray_target=None, ray_origin=None, film="default", direction=None
             }
         })
 
+    elif film == "32x1":
+        result.update({
+            "film": {
+                "type": "hdrfilm",
+                "width": 32,
+                "height": 1,
+                "rfilter": {"type": "box"}
+            }
+        })
+
+    elif film == "32x32":
+        result.update({
+            "film": {
+                "type": "hdrfilm",
+                "width": 32,
+                "height": 32,
+                "rfilter": {"type": "box"}
+            }
+        })
+
     if direction is not None:
         result["direction"] = direction
+
+    if orientation is not None:
+        result["orientation"] = orientation
 
     if ray_target == "point":
         result.update({"ray_target": [0, 0, 0]})
@@ -44,39 +68,43 @@ def make_sensor(d):
 
 
 def test_construct(variant_scalar_rgb):
-    # Construct without parameters (expected to raise due to wrong film size)
-    with pytest.raises(RuntimeError):
-        make_sensor({"type": "distant"})
-
-    # Construct with wrong film size
-    with pytest.raises(RuntimeError):
-        make_sensor(sensor_dict(film={
-            "type": "hdrfilm",
-            "width": 2,
-            "height": 2
-        }))
-
-    # Construct with minimal parameters
-    sensor = make_sensor(sensor_dict())
+    # Construct without parameters
+    sensor = make_sensor({"type": "distant"})
     assert sensor is not None
     assert not sensor.bbox().valid()  # Degenerate bounding box
 
     # Construct with direction, check transform setup correctness
-    world_reference = [[0, 1, 0, 0],
-                       [1, 0, 0, 0],
-                       [0, 0, -1, 0],
-                       [0, 0, 0, 1]]
-    sensor = make_sensor(sensor_dict(direction=[0, 0, -1]))
-    assert ek.allclose(
-        sensor.world_transform().eval(0.).matrix,
-        world_reference
-    )
-
-    sensor = make_sensor(sensor_dict(direction=[0, 0, -2]))
-    assert ek.allclose(
-        sensor.world_transform().eval(0.).matrix,
-        world_reference
-    )
+    for direction, orientation, expected in [
+        ([0, 0, 1], None, [[1, 0, 0, 0],
+                           [0, 1, 0, 0],
+                           [0, 0, 1, 0],
+                           [0, 0, 0, 1]]),
+        ([0, 0, 2], None, [[1, 0, 0, 0],
+                           [0, 1, 0, 0],
+                           [0, 0, 1, 0],
+                           [0, 0, 0, 1]]),
+        ([0, 0, 1], [1, 0, 0], [[1, 0, 0, 0],
+                                [0, 1, 0, 0],
+                                [0, 0, 1, 0],
+                                [0, 0, 0, 1]]),
+        ([0, 0, 1], [0, 1, 0], [[0, -1, 0, 0],
+                                [1, 0, 0, 0],
+                                [0, 0, 1, 0],
+                                [0, 0, 0, 1]]),
+        ([0, 0, 1], [0, -1, 0], [[0, 1, 0, 0],
+                                 [-1, 0, 0, 0],
+                                 [0, 0, 1, 0],
+                                 [0, 0, 0, 1]]),
+        ([0, 0, 1], [1, 1, 0], [[0.707107, -0.707107, 0, 0],
+                                [0.707107, 0.707107, 0, 0],
+                                [0, 0, 1, 0],
+                                [0, 0, 0, 1]]),
+    ]:
+        sensor = make_sensor(sensor_dict(direction=direction,
+                                         orientation=orientation))
+        result = sensor.world_transform().eval(0.).matrix
+        assert np.allclose(result, expected)
+        # Couldn't get ek.allclose() to work here
 
     # Test different combinations of target and origin values
     # -- No target, no origin
@@ -110,11 +138,11 @@ def test_construct(variant_scalar_rgb):
 
 @pytest.mark.parametrize("direction", [
     [0.0, 0.0, 1.0],
-    [-1.0, -1.0, 0.0],
+    [1.0, 1.0, 0.0],
     [2.0, 0.0, 0.0]
 ])
-def test_sample_ray_direction(variant_scalar_rgb, direction):
-    sensor = make_sensor(sensor_dict(direction=direction))
+def test_sample_ray_direction_1x1(variant_scalar_rgb, direction):
+    sensor = make_sensor(sensor_dict(film="1x1", direction=direction))
 
     # Check that directions are appropriately set
     for (sample1, sample2) in [[[0.32, 0.87], [0.16, 0.44]],
@@ -124,7 +152,31 @@ def test_sample_ray_direction(variant_scalar_rgb, direction):
         ray, _ = sensor.sample_ray(1., 1., sample1, sample2, True)
 
         # Check that ray direction is what is expected
-        assert ek.allclose(ray.d, ek.normalize(direction))
+        assert ek.allclose(ray.d, -ek.normalize(direction))
+
+
+@pytest.mark.parametrize("orientation", [
+    [1.0, 0.0, 0.0],
+    [0.0, 1.0, 0.0],
+    [1.0, 1.0, 0.0],
+])
+def test_sample_ray_direction_32x1(variant_scalar_rgb, orientation):
+    direction = [0., 0., 1.]
+    sensor = make_sensor(sensor_dict(
+        film="32x1", direction=direction, orientation=orientation
+    ))
+
+    excluded = ek.cross(direction, orientation)
+
+    # Check that directions are appropriately set
+    for (sample1, sample2) in [[[0.32, 0.87], [0.16, 0.44]],
+                               [[0.17, 0.44], [0.22, 0.81]],
+                               [[0.12, 0.82], [0.99, 0.42]],
+                               [[0.72, 0.40], [0.01, 0.61]]]:
+        ray, _ = sensor.sample_ray(1., 1., sample1, sample2, True)
+
+        # Check that ray direction is what is expected
+        assert ek.allclose(ek.dot(ray.d, excluded), 0.)
 
 
 def bsphere(bbox):
@@ -148,7 +200,7 @@ def test_sample_ray_origin(variant_scalar_rgb, ray_kind):
     scene_dict = {
         "type": "scene",
         "shape": {"type": "rectangle"},
-        "sensor": sensor_dict(direction=[0, 0, -1]),
+        "sensor": sensor_dict(direction=[0, 0, 1]),
     }
     scene = load_dict(scene_dict)
     sensor = scene.sensors()[0]
@@ -170,7 +222,7 @@ def test_sample_ray_origin(variant_scalar_rgb, ray_kind):
     # an arbitrary z altitude
     z_offset = 3.42
 
-    for direction in [[0, 0, -1], [0, -2, -1]]:
+    for direction in [[0, 0, 1], [0, 2, 1]]:
         scene_dict = {
             "type": "scene",
             "shape": {"type": "rectangle"},
@@ -194,7 +246,7 @@ def test_sample_ray_origin(variant_scalar_rgb, ray_kind):
             assert ek.allclose(ray.o.z, z_offset)
 
     # Check that wrong origins will lead to invalid rays
-    direction = [0, 0, -1]
+    direction = [0, 0, 1]
     scene_dict = {
         "type": "scene",
         "shape": {"type": "rectangle"},
@@ -231,8 +283,8 @@ def test_sample_ray_origin(variant_scalar_rgb, ray_kind):
     [0, 1, -1]
 ])
 @pytest.mark.parametrize("w_o", [
-    [0, 0, -1],
-    [0, 1, -1]
+    [0, 0, 1],
+    [0, 1, 1]
 ])
 def test_sample_ray_target(variant_scalar_rgb, sensor_setup, w_e, w_o):
     # This test checks if targeting works as intended by rendering a basic scene
@@ -388,13 +440,12 @@ def test_sample_ray_target(variant_scalar_rgb, sensor_setup, w_e, w_o):
         Bitmap.PixelFormat.RGB, Struct.Type.Float32, False)).squeeze()
 
     surface_area = 4. * surface_scale ** 2  # Area of square surface
-    l_o = l_e * cos_theta_e * rho / np.pi * cos_theta_o
+    l_o = l_e * cos_theta_e * rho / np.pi  # * cos_theta_o
     expected = {  # Special expected values for some cases
-        "target_square_small": l_o * surface_area * 0.25,
-        "target_point": l_o,
-        "target_disk": l_o * np.pi * surface_scale ** 2,
+        "default": l_o * 2. / ek.pi,
+        "target_square_large": l_o * 0.25,
     }
-    expected_value = expected.get(sensor_setup, l_o * surface_area)
+    expected_value = expected.get(sensor_setup, l_o)
 
     rtol = {  # Special tolerance values for some cases
         "target_square_large": 1e-2,
