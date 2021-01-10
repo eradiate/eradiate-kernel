@@ -5,7 +5,7 @@ import enoki as ek
 
 
 def sensor_dict(ray_target=None, ray_origin=None, film="1x1",
-                direction=None, orientation=None):
+                direction=None, orientation=None, flip_directions=None):
     result = {"type": "distant"}
 
     if film == "1x1":
@@ -58,6 +58,9 @@ def sensor_dict(ray_target=None, ray_origin=None, film="1x1",
 
     elif isinstance(ray_origin, dict):
         result.update({"ray_origin": ray_origin})
+
+    if flip_directions is not None:
+        result.update({"flip_directions": flip_directions})
 
     return result
 
@@ -177,6 +180,32 @@ def test_sample_ray_direction_32x1(variant_scalar_rgb, orientation):
 
         # Check that ray direction is what is expected
         assert ek.allclose(ek.dot(ray.d, excluded), 0.)
+
+
+def test_flip_direction(variant_scalar_rgb):
+    time = 1.
+    sample_wav = 1.
+    samples = [[[0.32, 0.87], [0.16, 0.44]],
+               [[0.17, 0.44], [0.22, 0.81]],
+               [[0.12, 0.82], [0.99, 0.42]],
+               [[0.72, 0.40], [0.01, 0.61]]]
+    
+    direction = [0., 0., 1.]
+    sensor1 = make_sensor(sensor_dict(
+        film="32x32", direction=direction, flip_directions=False
+    ))
+    sensor2 = make_sensor(sensor_dict(
+        film="32x32", direction=direction, flip_directions=True
+    ))
+
+    for (sample1, sample2) in samples:
+        ray1, _ = sensor1.sample_ray(
+            time, sample_wav, sample1, sample2, True)
+        ray2, _ = sensor2.sample_ray(
+            time, sample_wav, sample1, sample2, True)
+        
+        assert ek.allclose(ray1.d, -ray2.d)
+
 
 
 def bsphere(bbox):
