@@ -38,19 +38,13 @@ Apart from homogeneous values, the plugin can also accept
 nested or referenced texture maps to be used as the source of parameter
 information, which is then mapped onto the shape based on its UV
 parameterization. When no parameters are specified, the model uses the default
-values of :math:`\rho_0 = 0.1`, :math:`k = 0.1` and :math:`\Theta = 0.0`
+values of :math:`\rho_0 = 0.1`, :math:`k = 0.1` and :math:`g = 0.0`
 
-The model includes several extensions, which introduce up to three optional
-parameters. The following formulae demonstrate these extensions. For the
-fundamental formulae defining the RPV model please refer to the Eradiate
+This plugin also supports the most common extension to four parameters, namely the 
+:math:`\rho_c` extension, as used in :cite:`Widlowski2006Rayspread`.
+
+For the fundamental formulae defining the RPV model please refer to the Eradiate
 Scientific Handbook.
-
-- Parameter :math:`\rho_c`:
-
-  :math:`1+R(G)=1+\frac{1-\rho_c}{1+G}`
-
-  If not given, it defaults to :math:`\rho_0`, yielding the fundamental
-  version of the formula.
 
 Note that this material is one-sided, that is, observed from the
 back side, it will be completely black. If this is undesirable,
