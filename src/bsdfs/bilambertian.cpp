@@ -69,7 +69,6 @@ public:
 
         Float cos_theta_i = Frame3f::cos_theta(si.wi);
         Vector3f wo       = warp::square_to_cosine_hemisphere(sample2);
-        Float cos_theta_o = Frame3f::cos_theta(wo);
 
         BSDFSample3f bs   = zero<BSDFSample3f>();
         UnpolarizedSpectrum value(0.f);
