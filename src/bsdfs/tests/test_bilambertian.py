@@ -24,7 +24,9 @@ def test_eval_pdf(variant_scalar_rgb):
     from mitsuba.render import BSDFContext, SurfaceInteraction3f
     from mitsuba.core import Frame3f
 
-    for (r, t) in [(0.2, 0.4), (0.9, 0.1)]:
+    for (r, t) in [(0.2, 0.4), (0.4, 0.2),
+                   (0.1, 0.9), (0.9, 0.1),
+                   (0.4, 0.6), (0.6, 0.4)]:
         albedo = r + t
 
         bsdf = load_dict({
@@ -65,6 +67,10 @@ def test_eval_pdf(variant_scalar_rgb):
 @pytest.mark.parametrize("r,t", [
     [0.6, 0.2],
     [0.2, 0.6],
+    [0.6, 0.4],
+    [0.4, 0.6],
+    [0.9, 0.1],
+    [0.1, 0.9],
     # [1.0, 0.0],  # Fails inexplicably
     [0.0, 1.0],
     # [0.0, 0.0]   # Fails inexplicably

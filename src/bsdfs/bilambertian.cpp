@@ -74,9 +74,6 @@ public:
         BSDFSample3f bs   = zero<BSDFSample3f>();
         UnpolarizedSpectrum value(0.f);
 
-        // Flip the outgoing direction if the incoming comes from "behind"
-        wo = select(cos_theta_i > 0, wo, Vector3f(wo.x(), wo.y(), -wo.z()));
-
         // Select the lobe to be sampled
         UnpolarizedSpectrum r            = m_reflectance->eval(si, active),
                             t            = m_transmittance->eval(si, active);
@@ -88,7 +85,7 @@ public:
              selected_t = (sample1 >= reflection_sampling_weight) && active;
 
         // Evaluate
-        value = select(active, cos_theta_o, 0.f);
+        value = select(active, Float(1.f), 0.f);
         value[selected_r] *= r;
         value[selected_t] *= t;
 
@@ -105,6 +102,9 @@ public:
             select(selected_r, UInt32(+BSDFFlags::DiffuseReflection),
                    UInt32(+BSDFFlags::DiffuseTransmission));
 
+        // Flip the outgoing direction if the incoming comes from "behind"
+        wo = select(cos_theta_i > 0, wo, Vector3f(wo.x(), wo.y(), -wo.z()));
+        
         // Flip the outgoing direction if transmission was selected
         bs.wo = select(selected_r, wo, Vector3f(wo.x(), wo.y(), -wo.z()));
 
