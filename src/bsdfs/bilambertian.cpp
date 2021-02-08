@@ -131,14 +131,14 @@ public:
         if (has_reflect) {
             // If reflection is activated, compute reflection for relevant
             // directions
-            Mask is_reflect = Mask(cos_theta_i * cos_theta_o >= 0.f) && active;
+            auto is_reflect = Mask(eq(sign(cos_theta_i), sign(cos_theta_o))) && active;
             result[is_reflect] = m_reflectance->eval(si, is_reflect);
         }
 
         if (has_transmit) {
             // If transmission is activated, compute transmission for relevant
             // directions
-            Mask is_transmit = Mask(cos_theta_i * cos_theta_o < 0.f) && active;
+            auto is_transmit = Mask(neq(sign(cos_theta_i), sign(cos_theta_o))) && active;
             result[is_transmit] = m_transmittance->eval(si, is_transmit);
         }
 
