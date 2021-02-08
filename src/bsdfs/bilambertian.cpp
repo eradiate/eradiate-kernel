@@ -25,13 +25,15 @@ Bi-Lambertian material (:monosp:`bilambertian`)
 
 The bi-Lambertian material represents a material that scatters light diffusely
 into the entire sphere. The reflectance specifies the amount of light scattered
-into the incoming hemisphere, while the transmittance specifies the amount of 
+into the incoming hemisphere, while the transmittance specifies the amount of
 light scattered into the outgoing hemisphere. This material is two-sided.
 
 .. subfigstart::
-.. subfigure:: ../../resources/data-extra/docs/images/render/bsdf_bilambertian_reflective.jpg
+.. subfigure::
+../../resources/data-extra/docs/images/render/bsdf_bilambertian_reflective.jpg
    :caption: With dominant reflectivity
-.. subfigure:: ../../resources/data-extra/docs/images/render/bsdf_bilambertian_transmissive.jpg
+.. subfigure::
+../../resources/data-extra/docs/images/render/bsdf_bilambertian_transmissive.jpg
    :caption: With dominant transmissivity
 .. subfigend::
    :label: fig-bilambertian
@@ -103,7 +105,7 @@ public:
 
         // Flip the outgoing direction if the incoming comes from "behind"
         wo = select(cos_theta_i > 0, wo, Vector3f(wo.x(), wo.y(), -wo.z()));
-        
+
         // Flip the outgoing direction if transmission was selected
         bs.wo = select(selected_r, wo, Vector3f(wo.x(), wo.y(), -wo.z()));
 
@@ -127,18 +129,21 @@ public:
         UnpolarizedSpectrum result(0.f);
 
         if (has_reflect) {
-            Mask is_reflect =
-                Mask(sign(cos_theta_i) == sign(cos_theta_o)) && active;
+            // If reflection is activated, compute reflection for relevant
+            // directions
+            Mask is_reflect = Mask(cos_theta_i * cos_theta_o >= 0.f) && active;
             result[is_reflect] = m_reflectance->eval(si, is_reflect);
         }
 
         if (has_transmit) {
-            Mask is_transmit =
-                Mask(sign(cos_theta_i) != sign(cos_theta_o)) && active;
+            // If transmission is activated, compute transmission for relevant
+            // directions
+            Mask is_transmit = Mask(cos_theta_i * cos_theta_o < 0.f) && active;
             result[is_transmit] = m_transmittance->eval(si, is_transmit);
         }
 
-        result[active] *= math::InvPi<Float> * abs(cos_theta_o);
+        result[active] *= (math::InvPi<Float> * abs(cos_theta_o));
+
         return select(active, result, 0.f);
     }
 
@@ -149,12 +154,15 @@ public:
         bool has_reflect  = ctx.is_enabled(BSDFFlags::DiffuseReflection, 0),
              has_transmit = ctx.is_enabled(BSDFFlags::DiffuseTransmission, 1);
 
-        if (unlikely((!has_reflect && !has_transmit) || none_or<false>(active)))
+        if (unlikely(none_or<false>(active) || (!has_reflect && !has_transmit)))
             return 0.f;
 
         Float cos_theta_i = Frame3f::cos_theta(si.wi),
               cos_theta_o = Frame3f::cos_theta(wo);
+
+        // Ensure that uncoming direction is in upper hemisphere
         Vector3f wo_flip{ wo.x(), wo.y(), abs(cos_theta_o) };
+
         Float result =
             select(active, warp::square_to_cosine_hemisphere_pdf(wo_flip), 0.f);
 
