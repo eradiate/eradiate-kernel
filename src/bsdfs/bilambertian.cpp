@@ -129,15 +129,13 @@ public:
         UnpolarizedSpectrum result(0.f);
 
         if (has_reflect) {
-            // If reflection is activated, compute reflection for relevant
-            // directions
+            // If reflection is activated, compute reflection for relevant directions
             auto is_reflect = Mask(eq(sign(cos_theta_i), sign(cos_theta_o))) && active;
             result[is_reflect] = m_reflectance->eval(si, is_reflect);
         }
 
         if (has_transmit) {
-            // If transmission is activated, compute transmission for relevant
-            // directions
+            // If transmission is activated, compute transmission for relevant directions
             auto is_transmit = Mask(neq(sign(cos_theta_i), sign(cos_theta_o))) && active;
             result[is_transmit] = m_transmittance->eval(si, is_transmit);
         }
@@ -166,22 +164,24 @@ public:
         Float result =
             select(active, warp::square_to_cosine_hemisphere_pdf(wo_flip), 0.f);
 
-        UnpolarizedSpectrum r            = m_reflectance->eval(si, active),
-                            t            = m_transmittance->eval(si, active);
-        Float reflection_sampling_weight = hmean(r / (r + t));
+        UnpolarizedSpectrum r              = m_reflectance->eval(si, active),
+                            t              = m_transmittance->eval(si, active);
+        Float reflection_sampling_weight   = hmean(r / (r + t)),
+              transmission_sampling_weight = 1.f - reflection_sampling_weight;
+
+
         // Handle case where r = t = 0
         masked(reflection_sampling_weight, isnan(reflection_sampling_weight)) = 0.f;
+        masked(transmission_sampling_weight, isnan(transmission_sampling_weight)) = 0.f;
         
         if (has_reflect) {
-            Mask is_reflect =
-                Mask(sign(cos_theta_i) == sign(cos_theta_o)) && active;
+            auto is_reflect = Mask(eq(sign(cos_theta_i), sign(cos_theta_o))) && active;
             masked(result, is_reflect) *= reflection_sampling_weight;
         }
 
         if (has_transmit) {
-            Mask is_transmit =
-                Mask(sign(cos_theta_i) != sign(cos_theta_o)) && active;
-            masked(result, is_transmit) *= (1.f - reflection_sampling_weight);
+            auto is_transmit = Mask(neq(sign(cos_theta_i), sign(cos_theta_o))) && active;
+            masked(result, is_transmit) *= transmission_sampling_weight;
         }
 
         return result;
