@@ -71,9 +71,9 @@ def test_eval_pdf(variant_scalar_rgb):
     [0.4, 0.6],
     [0.9, 0.1],
     [0.1, 0.9],
-    # [1.0, 0.0],  # Fails inexplicably
+    [1.0, 0.0],
     [0.0, 1.0],
-    # [0.0, 0.0]   # Fails inexplicably
+    [0.0, 0.0],
 ])
 def test_chi2(variant_packet_rgb, r, t):
     from mitsuba.python.chi2 import BSDFAdapter, ChiSquareTest, SphericalDomain
