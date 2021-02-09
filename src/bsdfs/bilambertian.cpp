@@ -66,7 +66,7 @@ public:
         bool has_reflect  = ctx.is_enabled(BSDFFlags::DiffuseReflection, 0),
              has_transmit = ctx.is_enabled(BSDFFlags::DiffuseTransmission, 1);
 
-        if (unlikely((!has_reflect && !has_transmit) || none_or<false>(active)))
+        if (unlikely(none_or<false>(active) || (!has_reflect && !has_transmit)))
             return { zero<BSDFSample3f>(), UnpolarizedSpectrum(0.f) };
 
         Float cos_theta_i = Frame3f::cos_theta(si.wi);
@@ -76,12 +76,15 @@ public:
         UnpolarizedSpectrum value(0.f);
 
         // Select the lobe to be sampled
-        UnpolarizedSpectrum r            = m_reflectance->eval(si, active),
-                            t            = m_transmittance->eval(si, active);
-        Float reflection_sampling_weight = hmean(r / (r + t));
+        UnpolarizedSpectrum r              = m_reflectance->eval(si, active),
+                            t              = m_transmittance->eval(si, active);
+        Float reflection_sampling_weight   = hmean(r / (r + t)),
+              transmission_sampling_weight = 1.f - reflection_sampling_weight;
+
         // Handle case where r = t = 0
         masked(reflection_sampling_weight, isnan(reflection_sampling_weight)) = 0.f;
-        
+        masked(transmission_sampling_weight, isnan(transmission_sampling_weight)) = 0.f;
+
         Mask selected_r = (sample1 < reflection_sampling_weight) && active,
              selected_t = (sample1 >= reflection_sampling_weight) && active;
 
@@ -93,8 +96,7 @@ public:
         // Compute PDF
         bs.pdf = select(active, warp::square_to_cosine_hemisphere_pdf(wo), 0.f);
         bs.pdf = select(selected_r, bs.pdf * reflection_sampling_weight, bs.pdf);
-        bs.pdf = select(selected_t, bs.pdf * (1.f - reflection_sampling_weight), 
-                        bs.pdf);
+        bs.pdf = select(selected_t, bs.pdf * transmission_sampling_weight, bs.pdf);
 
         // Set other interaction fields
         bs.eta               = 1.f;
