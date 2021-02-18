@@ -90,8 +90,8 @@ public:
 
         // Evaluate
         value = select(active, Float(1.f), 0.f);
-        value[selected_r] *= r;
-        value[selected_t] *= t;
+        value[selected_r] *= r / reflection_sampling_weight;
+        value[selected_t] *= t / transmission_sampling_weight;
 
         // Compute PDF
         bs.pdf = select(active, warp::square_to_cosine_hemisphere_pdf(wo), 0.f);
