@@ -39,14 +39,14 @@ of floating point values, where three subsequent values will be grouped into a
 point or vector respectively.
 
 The following snippet shows how to specify a :monosp:`radiancemeterarray` with
-two sensors, one located ad (1, 0, 0) and pointing in the direction (-1, 0, 0),
+two sensors, one located at (1, 0, 0) and pointing in the direction (-1, 0, 0),
 the other located at (0, 1, 0) and pointing in the direction (0, -1, 0).
 
 .. code-block:: xml
 
     <sensor type="radiancemeterarray">
-            <string name="origins" value="1, 0, 0, 0, 1, 0"/>
-            <string name="directions" value="-1, 0, 0, 0, -1, 0/>
+        <string name="origins" value="1, 0, 0, 0, 1, 0"/>
+        <string name="directions" value="-1, 0, 0, 0, -1, 0/>
     </sensor>
 
 */
