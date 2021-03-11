@@ -29,12 +29,15 @@ into the incoming hemisphere, while the transmittance specifies the amount of
 light scattered into the outgoing hemisphere. This material is two-sided.
 
 .. subfigstart::
+
 .. subfigure::
-../../resources/data-extra/docs/images/render/bsdf_bilambertian_reflective.jpg
+   ../../resources/data-extra/docs/images/render/bsdf_bilambertian_reflective.jpg
    :caption: With dominant reflectivity
+
 .. subfigure::
-../../resources/data-extra/docs/images/render/bsdf_bilambertian_transmissive.jpg
+   ../../resources/data-extra/docs/images/render/bsdf_bilambertian_transmissive.jpg
    :caption: With dominant transmissivity
+
 .. subfigend::
    :label: fig-bilambertian
 
