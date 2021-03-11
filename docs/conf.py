@@ -163,6 +163,7 @@ extensions.append('sphinx.ext.todo')
 todo_include_todos = True
 
 extensions.append('sphinxcontrib.bibtex')
+bibtex_bibfiles = ['references.bib']
 
 # Touch the bibliography file to force a rebuild of it
 Path('zz_bibliography.rst').touch()
@@ -370,4 +371,4 @@ def custom_step(app):
 def setup(app):
     # Texinfo
     app.connect("builder-inited", custom_step)
-    app.add_stylesheet('theme_overrides.css')
+    app.add_css_file('theme_overrides.css')
