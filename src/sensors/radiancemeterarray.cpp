@@ -44,10 +44,24 @@ the other located at (0, 1, 0) and pointing in the direction (0, -1, 0).
 
 .. code-block:: xml
 
-    <sensor type="radiancemeterarray">
+    <sensor version="2.0.0" type="radiancemeterarray">
         <string name="origins" value="1, 0, 0, 0, 1, 0"/>
-        <string name="directions" value="-1, 0, 0, 0, -1, 0/>
+        <string name="directions" value="-1, 0, 0, 0, -1, 0"/>
+        <film type="hdrfilm">
+            <integer name="width" value="2"/>
+            <integer name="height" value="1"/>
+            <rfilter type="box"/>
+        </film>
     </sensor>
+
+.. code-block:: xml
+    :name: sphere-meter
+
+    <shape type="sphere">
+        <sensor type="irradiancemeter">
+            <!-- film -->
+        </sensor>
+    </shape>
 
 */
 
@@ -108,9 +122,9 @@ public:
         }
 
         if (m_film->size() != ScalarPoint2i(m_transforms.size() / 16, 1))
-            Throw("Film width must match the number of radiancemeters defined."
-                  "Found: %s vs. %s",
-                  m_film->size().x(), m_sensor_count);
+            Throw("Film size must be [n_radiancemeters, 1]. Expected %s, "
+                  "found: %s",
+                  ScalarPoint2i(m_transforms.size() / 16, 1), m_film->size());
 
         if (m_film->reconstruction_filter()->radius() >
             0.5f + math::RayEpsilon<Float>)
