@@ -2,16 +2,9 @@ import mitsuba
 
 
 def test_create(variant_scalar_rgb):
-    from mitsuba.core.xml import load_string
-    p = load_string("""<phase version='2.0.0' type='rayleigh'/>""")
+    from mitsuba.core.xml import load_dict
+    p = load_string({"type": "rayleigh"})
     assert p is not None
-
-
-def test_create(variant_scalar_mono_polarized):
-    from mitsuba.core.xml import load_string
-    p = load_string("""<phase version='2.0.0' type='rayleigh'/>""")
-    assert p is not None
-
 
 def test_chi2(variant_packet_rgb):
     from mitsuba.python.chi2 import PhaseFunctionAdapter, ChiSquareTest, SphericalDomain
