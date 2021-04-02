@@ -591,7 +591,7 @@ def PhaseFunctionAdapter(phase_type, extra, wi=[0, 0, 1]):
         n = ek.slices(sample)
         plugin = instantiate(args)
         mi, ctx = make_context(n)
-        wo, pdf = plugin.sample(ctx, mi, [sample[0], sample[1]])
+        wo, pdf = plugin.sample(ctx, mi, sample[0], [sample[1], sample[2]])
         w = Float.full(1.0, ek.slices(pdf))
         w[ek.eq(pdf, 0)] = 0
         return wo, w

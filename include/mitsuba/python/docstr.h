@@ -23,6 +23,10 @@
 #endif
 
 
+static const char *__doc_EmptySbtRecord = R"doc()doc";
+
+static const char *__doc_EmptySbtRecord_header = R"doc()doc";
+
 static const char *__doc_OptixHitGroupData = R"doc(Stores information about a Shape on the Optix side)doc";
 
 static const char *__doc_OptixHitGroupData_data = R"doc(Pointer to the memory region of Shape data (e.g. ``OptixMeshData`` ))doc";
@@ -31,7 +35,7 @@ static const char *__doc_OptixHitGroupData_shape_ptr = R"doc(Pointer to the asso
 
 static const char *__doc_OptixParams =
 R"doc(Launch-varying data structure specifying data pointers for the input
-and output variables)doc";
+and output variables.)doc";
 
 static const char *__doc_OptixParams_handle = R"doc(Handle for the acceleration data structure to trace against)doc";
 
@@ -59,6 +63,8 @@ static const char *__doc_OptixParams_out_dp_dv = R"doc(Output surface interactio
 
 static const char *__doc_OptixParams_out_hit = R"doc(Output boolean data pointer for ray_test)doc";
 
+static const char *__doc_OptixParams_out_inst_index = R"doc()doc";
+
 static const char *__doc_OptixParams_out_ng = R"doc(Output surface interaction data pointers)doc";
 
 static const char *__doc_OptixParams_out_ns = R"doc(Output surface interaction data pointers)doc";
@@ -75,11 +81,13 @@ static const char *__doc_OptixParams_out_t = R"doc(Output surface interaction da
 
 static const char *__doc_OptixParams_out_uv = R"doc(Output surface interaction data pointers)doc";
 
-static const char *__doc_enoki_operator_lshift = R"doc(Prints the canonical representation of a PCG32 object.)doc";
+static const char *__doc_SbtRecord = R"doc()doc";
 
-static const char *__doc_get_shape_descr_idx =
-R"doc(Retrieve index of custom shape descriptor in the list above for a
-given shape)doc";
+static const char *__doc_SbtRecord_data = R"doc()doc";
+
+static const char *__doc_SbtRecord_header = R"doc()doc";
+
+static const char *__doc_enoki_operator_lshift = R"doc(Prints the canonical representation of a PCG32 object.)doc";
 
 static const char *__doc_mitsuba_AnimatedTransform =
 R"doc(Encapsulates an animated 4x4 homogeneous coordinate transformation
@@ -866,7 +874,7 @@ pixel_format Specifies the desired pixel format
 component_format Specifies the desired component format
 
 srgb_gamma Specifies whether a sRGB gamma ramp should be applied to
-the ouutput values.)doc";
+the output values.)doc";
 
 static const char *__doc_mitsuba_Bitmap_convert_2 = R"doc()doc";
 
@@ -2724,7 +2732,8 @@ at the construction of the block.
 Parameter ``pos``:
     Denotes the sample position in fractional pixel coordinates. It is
     not checked, and so must be valid. The block's offset is
-    subtracted from the given position to obtain the
+    subtracted from the given position to obtain the final pixel
+    position.
 
 Parameter ``wavelengths``:
     Sample wavelengths in nanometers
@@ -2749,7 +2758,8 @@ provided when the block was constructed.
 Parameter ``pos``:
     Denotes the sample position in fractional pixel coordinates. It is
     not checked, and so must be valid. The block's offset is
-    subtracted from the given position to obtain the
+    subtracted from the given position to obtain the final pixel
+    position.
 
 Parameter ``value``:
     Pointer to an array containing each channel of the sample values.
@@ -3927,6 +3937,22 @@ Remark:
 See also:
     TraversalCallback)doc";
 
+static const char *__doc_mitsuba_OptixAccelData =
+R"doc(Stores two OptiXTraversables: one for the meshes and one for the
+custom shapes (e.g. sphere))doc";
+
+static const char *__doc_mitsuba_OptixAccelData_HandleData = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixAccelData_HandleData_buffer = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixAccelData_HandleData_count = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixAccelData_HandleData_handle = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixAccelData_meshes = R"doc()doc";
+
+static const char *__doc_mitsuba_OptixAccelData_others = R"doc()doc";
+
 static const char *__doc_mitsuba_PCG32Sampler =
 R"doc(Interface for sampler plugins based on the PCG32 random number
 generator)doc";
@@ -3957,6 +3983,14 @@ static const char *__doc_mitsuba_PhaseFunctionContext = R"doc()doc";
 
 static const char *__doc_mitsuba_PhaseFunctionContext_PhaseFunctionContext = R"doc(//! @})doc";
 
+static const char *__doc_mitsuba_PhaseFunctionContext_PhaseFunctionContext_2 = R"doc()doc";
+
+static const char *__doc_mitsuba_PhaseFunctionContext_component = R"doc()doc";
+
+static const char *__doc_mitsuba_PhaseFunctionContext_is_enabled =
+R"doc(Checks whether a given phase function component type and phase
+function component index are enabled in this context.)doc";
+
 static const char *__doc_mitsuba_PhaseFunctionContext_mode = R"doc(Transported mode (radiance or importance))doc";
 
 static const char *__doc_mitsuba_PhaseFunctionContext_reverse =
@@ -3967,6 +4001,8 @@ versa).)doc";
 
 static const char *__doc_mitsuba_PhaseFunctionContext_sampler = R"doc(Sampler object)doc";
 
+static const char *__doc_mitsuba_PhaseFunctionContext_type_mask = R"doc()doc";
+
 static const char *__doc_mitsuba_PhaseFunctionFlags =
 R"doc(This enumeration is used to classify phase functions into different
 types, i.e. into isotropic, anisotropic and microflake phase
@@ -3975,17 +4011,21 @@ functions.
 This can be used to optimize implementatons to for example have less
 overhead if the phase function is not a microflake phase function.)doc";
 
-static const char *__doc_mitsuba_PhaseFunctionFlags_Anisotropic = R"doc()doc";
+static const char *__doc_mitsuba_PhaseFunctionFlags_All = R"doc(Any kind of scattering phase function)doc";
 
-static const char *__doc_mitsuba_PhaseFunctionFlags_Isotropic = R"doc()doc";
+static const char *__doc_mitsuba_PhaseFunctionFlags_Anisotropic = R"doc(Anisotropic (at least one lobe))doc";
 
-static const char *__doc_mitsuba_PhaseFunctionFlags_Microflake = R"doc()doc";
+static const char *__doc_mitsuba_PhaseFunctionFlags_Isotropic = R"doc(Isotropic)doc";
 
-static const char *__doc_mitsuba_PhaseFunctionFlags_None = R"doc()doc";
+static const char *__doc_mitsuba_PhaseFunctionFlags_Microflake = R"doc(Microflake)doc";
+
+static const char *__doc_mitsuba_PhaseFunctionFlags_None = R"doc(No flags (default value))doc";
 
 static const char *__doc_mitsuba_PhaseFunction_PhaseFunction = R"doc(//! @})doc";
 
 static const char *__doc_mitsuba_PhaseFunction_class = R"doc()doc";
+
+static const char *__doc_mitsuba_PhaseFunction_component_count = R"doc(Number of components this phase function is comprised of.)doc";
 
 static const char *__doc_mitsuba_PhaseFunction_eval =
 R"doc(Evaluates the phase function model
@@ -4008,9 +4048,13 @@ Parameter ``wo``:
 Returns:
     The value of the phase function in direction wo)doc";
 
-static const char *__doc_mitsuba_PhaseFunction_flags = R"doc(Flags for this phase function)doc";
+static const char *__doc_mitsuba_PhaseFunction_flags = R"doc(Flags for this phase function.)doc";
+
+static const char *__doc_mitsuba_PhaseFunction_flags_2 = R"doc(Flags for a specific component of this phase function.)doc";
 
 static const char *__doc_mitsuba_PhaseFunction_id = R"doc(Return a string identifier)doc";
+
+static const char *__doc_mitsuba_PhaseFunction_m_components = R"doc(Flags for each component of this phase function.)doc";
 
 static const char *__doc_mitsuba_PhaseFunction_m_flags = R"doc(Type of phase function (e.g. anisotropic))doc";
 
@@ -4063,7 +4107,11 @@ Parameter ``mi``:
     medium position. The incident direction is obtained from the field
     ``mi.wi``.
 
-Parameter ``sample``:
+Parameter ``sample1``:
+    A uniformly distributed sample on $[0,1]$. It is used to select
+    the phase function component in multi-component models.
+
+Parameter ``sample2``:
     A uniformly distributed sample on $[0,1]^2$. It is used to
     generate the sampled direction.
 
@@ -5182,6 +5230,8 @@ static const char *__doc_mitsuba_Scene_m_integrator = R"doc()doc";
 
 static const char *__doc_mitsuba_Scene_m_sensors = R"doc()doc";
 
+static const char *__doc_mitsuba_Scene_m_shapegroups = R"doc()doc";
+
 static const char *__doc_mitsuba_Scene_m_shapes = R"doc()doc";
 
 static const char *__doc_mitsuba_Scene_m_shapes_grad_enabled = R"doc()doc";
@@ -5426,6 +5476,38 @@ static const char *__doc_mitsuba_Shape_3 = R"doc()doc";
 
 static const char *__doc_mitsuba_Shape_4 = R"doc()doc";
 
+static const char *__doc_mitsuba_ShapeGroup = R"doc()doc";
+
+static const char *__doc_mitsuba_ShapeGroup_2 = R"doc()doc";
+
+static const char *__doc_mitsuba_ShapeGroup_3 = R"doc()doc";
+
+static const char *__doc_mitsuba_ShapeGroup_4 = R"doc()doc";
+
+static const char *__doc_mitsuba_ShapeGroup_ShapeGroup = R"doc()doc";
+
+static const char *__doc_mitsuba_ShapeGroup_bbox = R"doc()doc";
+
+static const char *__doc_mitsuba_ShapeGroup_class = R"doc()doc";
+
+static const char *__doc_mitsuba_ShapeGroup_compute_surface_interaction = R"doc()doc";
+
+static const char *__doc_mitsuba_ShapeGroup_effective_primitive_count = R"doc()doc";
+
+static const char *__doc_mitsuba_ShapeGroup_m_bbox = R"doc()doc";
+
+static const char *__doc_mitsuba_ShapeGroup_m_kdtree = R"doc()doc";
+
+static const char *__doc_mitsuba_ShapeGroup_primitive_count = R"doc()doc";
+
+static const char *__doc_mitsuba_ShapeGroup_ray_intersect_preliminary = R"doc()doc";
+
+static const char *__doc_mitsuba_ShapeGroup_ray_test = R"doc()doc";
+
+static const char *__doc_mitsuba_ShapeGroup_surface_area = R"doc()doc";
+
+static const char *__doc_mitsuba_ShapeGroup_to_string = R"doc()doc";
+
 static const char *__doc_mitsuba_ShapeKDTree = R"doc()doc";
 
 static const char *__doc_mitsuba_ShapeKDTree_2 = R"doc()doc";
@@ -5625,11 +5707,15 @@ static const char *__doc_mitsuba_Shape_interior_medium = R"doc(Return the medium
 
 static const char *__doc_mitsuba_Shape_is_emitter = R"doc(Is this shape also an area emitter?)doc";
 
+static const char *__doc_mitsuba_Shape_is_instance = R"doc(Is this shape an instance?)doc";
+
 static const char *__doc_mitsuba_Shape_is_medium_transition = R"doc(Does the surface of this shape mark a medium transition?)doc";
 
 static const char *__doc_mitsuba_Shape_is_mesh = R"doc(Is this shape a triangle mesh?)doc";
 
 static const char *__doc_mitsuba_Shape_is_sensor = R"doc(Is this shape also an area sensor?)doc";
+
+static const char *__doc_mitsuba_Shape_is_shapegroup = R"doc(Is this shape a shapegroup?)doc";
 
 static const char *__doc_mitsuba_Shape_m_bsdf = R"doc()doc";
 
@@ -5640,8 +5726,6 @@ static const char *__doc_mitsuba_Shape_m_exterior_medium = R"doc()doc";
 static const char *__doc_mitsuba_Shape_m_id = R"doc()doc";
 
 static const char *__doc_mitsuba_Shape_m_interior_medium = R"doc()doc";
-
-static const char *__doc_mitsuba_Shape_m_mesh = R"doc()doc";
 
 static const char *__doc_mitsuba_Shape_m_sensor = R"doc()doc";
 
@@ -7050,11 +7134,13 @@ Parameter ``si``:
 Returns:
     An scalar intensity or reflectance value)doc";
 
-static const char* __doc_mitsuba_Texture_eval_1_grad =
-R"doc(Monochromatic evaluation of the texture gradient at the given
-surface interaction
+static const char *__doc_mitsuba_Texture_eval_1_grad =
+R"doc(Monochromatic evaluation of the texture gradient at the given surface
+interaction
+
 Parameter ``si``:
     An interaction record describing the associated surface position
+
 Returns:
     A (u,v) pair of intensity or reflectance value gradients)doc";
 
@@ -7603,8 +7689,6 @@ static const char *__doc_mitsuba_Volume_eval_gradient =
 R"doc(Evaluate the texture at the given surface interaction, and compute the
 gradients of the linear interpolant as well.)doc";
 
-static const char *__doc_mitsuba_Volume_is_inside = R"doc()doc";
-
 static const char *__doc_mitsuba_Volume_m_bbox = R"doc(Bounding box)doc";
 
 static const char *__doc_mitsuba_Volume_m_world_to_local = R"doc(Used to bring points in world coordinates to local coordinates.)doc";
@@ -7709,6 +7793,14 @@ interaction record. This function computes texture coordinate partials
 if this is required by the BSDF (e.g. for texture filtering).
 
 Implementation in 'bsdf.h')doc";
+
+static const char *__doc_mitsuba_build_gas =
+R"doc(Build OptiX geometry acceleration structures (GAS) for a given list of
+shapes.
+
+Two different GAS will be created for the meshes and the custom
+shapes. Optix handles to those GAS will be stored in an
+OptixAccelData.)doc";
 
 static const char *__doc_mitsuba_cie1931_xyz =
 R"doc(Evaluate the CIE 1931 XYZ color matching functions given a wavelength
@@ -8025,6 +8117,8 @@ R"doc(Changes the size of the regular file named by ``p`` as if ``truncate``
 was called. If the file was larger than ``target_length``, the
 remainder is discarded. The file must exist.)doc";
 
+static const char *__doc_mitsuba_fill_hitgroup_records = R"doc(Creates and appends the HitGroupSbtRecord for a given list of shapes)doc";
+
 static const char *__doc_mitsuba_fresnel =
 R"doc(Calculates the unpolarized Fresnel reflection coefficient at a planar
 interface between two dielectrics
@@ -8150,6 +8244,10 @@ eta_ti Reciprocal of the relative index of refraction in the direction
 of travel. In the real-valued case, this also happens to be equal to
 the scale factor that must be applied to the X and Y component of the
 refracted direction.)doc";
+
+static const char *__doc_mitsuba_get_shape_descr_idx =
+R"doc(Retrieve index of custom shape descriptor in the list above for a
+given shape)doc";
 
 static const char *__doc_mitsuba_has_flag = R"doc()doc";
 
@@ -8886,6 +8984,10 @@ Returns:
     permutation vector.)doc";
 
 static const char *__doc_mitsuba_perspective_projection = R"doc()doc";
+
+static const char *__doc_mitsuba_prepare_ias =
+R"doc(Prepares and fills the OptixInstance array associated with a given
+list of shapes.)doc";
 
 static const char *__doc_mitsuba_profiler_flags = R"doc()doc";
 
@@ -9972,6 +10074,10 @@ static const char *__doc_zmq_dump = R"doc()doc";
 
 static const char *__doc_zmq_envelope = R"doc()doc";
 
+static const char *__doc_zmq_envelope_2 = R"doc()doc";
+
+static const char *__doc_zmq_envelope_envelope = R"doc()doc";
+
 static const char *__doc_zmq_exception = R"doc()doc";
 
 static const char *__doc_zmq_exception_exception = R"doc()doc";
@@ -10034,6 +10140,10 @@ static const char *__doc_zmq_poll = R"doc()doc";
 
 static const char *__doc_zmq_poll_2 = R"doc()doc";
 
+static const char *__doc_zmq_poll_3 = R"doc()doc";
+
+static const char *__doc_zmq_poll_4 = R"doc()doc";
+
 static const char *__doc_zmq_poll_flags = R"doc()doc";
 
 static const char *__doc_zmq_poll_flags_pollin = R"doc()doc";
@@ -10062,6 +10172,8 @@ static const char *__doc_zmq_socket_connect_2 = R"doc()doc";
 
 static const char *__doc_zmq_socket_connected = R"doc()doc";
 
+static const char *__doc_zmq_socket_discard_remainder = R"doc(Gobble up the rest of a (partial) message and throw an exception)doc";
+
 static const char *__doc_zmq_socket_disconnect = R"doc()doc";
 
 static const char *__doc_zmq_socket_disconnect_2 = R"doc()doc";
@@ -10069,6 +10181,8 @@ static const char *__doc_zmq_socket_disconnect_2 = R"doc()doc";
 static const char *__doc_zmq_socket_getsockopt = R"doc()doc";
 
 static const char *__doc_zmq_socket_getsockopt_2 = R"doc()doc";
+
+static const char *__doc_zmq_socket_init = R"doc()doc";
 
 static const char *__doc_zmq_socket_more = R"doc()doc";
 
@@ -10082,7 +10196,29 @@ static const char *__doc_zmq_socket_operator_void = R"doc()doc";
 
 static const char *__doc_zmq_socket_ptr = R"doc()doc";
 
+static const char *__doc_zmq_socket_recv = R"doc()doc";
+
+static const char *__doc_zmq_socket_recv_2 = R"doc()doc";
+
+static const char *__doc_zmq_socket_recv_3 = R"doc()doc";
+
+static const char *__doc_zmq_socket_recv_4 = R"doc()doc";
+
+static const char *__doc_zmq_socket_recv_5 = R"doc()doc";
+
+static const char *__doc_zmq_socket_recv_6 = R"doc()doc";
+
 static const char *__doc_zmq_socket_recvmore = R"doc()doc";
+
+static const char *__doc_zmq_socket_recvmore_2 = R"doc()doc";
+
+static const char *__doc_zmq_socket_recvmore_3 = R"doc()doc";
+
+static const char *__doc_zmq_socket_recvmore_4 = R"doc()doc";
+
+static const char *__doc_zmq_socket_recvmore_5 = R"doc()doc";
+
+static const char *__doc_zmq_socket_recvmore_6 = R"doc()doc";
 
 static const char *__doc_zmq_socket_send = R"doc()doc";
 
@@ -10096,6 +10232,8 @@ static const char *__doc_zmq_socket_send_5 = R"doc()doc";
 
 static const char *__doc_zmq_socket_send_6 = R"doc()doc";
 
+static const char *__doc_zmq_socket_send_7 = R"doc()doc";
+
 static const char *__doc_zmq_socket_sendmore = R"doc()doc";
 
 static const char *__doc_zmq_socket_sendmore_2 = R"doc()doc";
@@ -10108,6 +10246,8 @@ static const char *__doc_zmq_socket_sendmore_5 = R"doc()doc";
 
 static const char *__doc_zmq_socket_sendmore_6 = R"doc()doc";
 
+static const char *__doc_zmq_socket_sendmore_7 = R"doc()doc";
+
 static const char *__doc_zmq_socket_setsockopt = R"doc()doc";
 
 static const char *__doc_zmq_socket_setsockopt_2 = R"doc()doc";
@@ -10117,6 +10257,8 @@ static const char *__doc_zmq_socket_socket = R"doc()doc";
 static const char *__doc_zmq_socket_socket_2 = R"doc()doc";
 
 static const char *__doc_zmq_socket_socket_3 = R"doc()doc";
+
+static const char *__doc_zmq_socket_socket_4 = R"doc()doc";
 
 static const char *__doc_zmq_socket_type = R"doc()doc";
 
@@ -10145,6 +10287,8 @@ static const char *__doc_zmq_socket_type_xsub = R"doc()doc";
 static const char *__doc_zmq_socket_unbind = R"doc()doc";
 
 static const char *__doc_zmq_socket_unbind_2 = R"doc()doc";
+
+static const char *__doc_zmq_version = R"doc()doc";
 
 static const char *__doc_zmq_zmq_check = R"doc()doc";
 
