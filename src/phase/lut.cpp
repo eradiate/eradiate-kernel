@@ -35,7 +35,7 @@ function of the cosine of the scattering angle.
 template <typename Float, typename Spectrum>
 class LUTPhaseFunction final : public PhaseFunction<Float, Spectrum> {
 public:
-    MTS_IMPORT_BASE(PhaseFunction, m_flags)
+    MTS_IMPORT_BASE(PhaseFunction, m_flags, m_components)
     MTS_IMPORT_TYPES(PhaseFunctionContext)
 
     LUTPhaseFunction(const Properties &props) : Base(props) {
@@ -60,18 +60,20 @@ public:
         }
 
         m_flags = +PhaseFunctionFlags::Anisotropic;
+        m_components.push_back(m_flags);
     }
 
     std::pair<Vector3f, Float> sample(const PhaseFunctionContext & /* ctx */,
                                       const MediumInteraction3f &mi,
-                                      const Point2f &sample,
+                                      Float /* sample1 */,
+                                      const Point2f &sample2,
                                       Mask active) const override {
         MTS_MASKED_FUNCTION(ProfilerPhase::PhaseFunctionSample, active);
 
-        Float cos_theta = m_distr.sample(sample.x());
+        Float cos_theta = m_distr.sample(sample2.x());
         Float sin_theta = enoki::safe_sqrt(1.0f - cos_theta * cos_theta);
         auto [sin_phi, cos_phi] =
-            enoki::sincos(2 * math::Pi<ScalarFloat> * sample.y());
+            enoki::sincos(2.f * math::Pi<ScalarFloat> * sample2.y());
         auto wo = Vector3f(sin_theta * cos_phi, sin_theta * sin_phi, cos_theta);
         wo      = mi.to_world(wo);
         Float pdf = m_distr.eval_pdf_normalized(-cos_theta, active) *
@@ -88,6 +90,10 @@ public:
         Float cos_theta = dot(wo, mi.wi);
         return m_distr.eval_pdf_normalized(-cos_theta, active) *
                math::InvTwoPi<ScalarFloat>;
+    }
+
+    void traverse(TraversalCallback * /* callback */) override {
+        NotImplementedError("traverse");
     }
 
     std::string to_string() const override {

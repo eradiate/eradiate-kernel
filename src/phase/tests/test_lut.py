@@ -1,8 +1,9 @@
 import numpy as np
-import mitsuba
+
 
 def test_create(variant_scalar_rgb):
     from mitsuba.core.xml import load_dict
+
     p = load_dict({"type": "lut", "values": "2, 1, 2"})
     assert p is not None
 
@@ -23,16 +24,19 @@ def test_eval(variant_scalar_rgb):
             lut_eval = lut.eval(ctx, mi, wo)
             assert np.allclose(iso_eval, lut_eval)
 
+
 def test_chi2(variant_packet_rgb):
     from mitsuba.python.chi2 import PhaseFunctionAdapter, ChiSquareTest, SphericalDomain
 
-    sample_func, pdf_func = PhaseFunctionAdapter("lut", '<string name="values" value="2, 1, 2"/>')
+    sample_func, pdf_func = PhaseFunctionAdapter(
+        "lut", '<string name="values" value="2, 1, 2"/>'
+    )
 
     chi2 = ChiSquareTest(
-        domain = SphericalDomain(),
-        sample_func = sample_func,
-        pdf_func = pdf_func,
-        sample_dim = 2
+        domain=SphericalDomain(),
+        sample_func=sample_func,
+        pdf_func=pdf_func,
+        sample_dim=3,
     )
 
     result = chi2.run(0.1)
