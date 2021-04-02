@@ -1,6 +1,6 @@
+#include <mitsuba/core/distr_1d.h>
 #include <mitsuba/core/properties.h>
 #include <mitsuba/core/warp.h>
-#include <mitsuba/core/distr_1d.h>
 #include <mitsuba/render/phase.h>
 
 /**!
@@ -10,22 +10,14 @@
 Rayleigh phase function (:monosp:`rayleigh`)
 -----------------------------------------------
 
-.. list-table::
- :widths: 20 15 65
- :header-rows: 1
- :class: paramstable
+Scattering by particles that are much smaller than the wavelength
+of light (e.g. individual molecules in the atmosphere) is well-approximated
+by the Rayleigh phase function. This plugin implements an unpolarized
+version of this scattering model (*i.e.* the effects of polarization are
+ignored). This plugin is useful for simulating scattering in planetary
+atmospheres.
 
- * - Parameter
-   - Type
-   - Description
- * - delta
-   - |float|
-   - This parameter specifies the particle depolarization factor
-     (usually between 0 and 0.5, can take values in :math:`[0,1[`). Default: 0
-
-This plugin implements the scalar version of the Rayleigh phase function model
-proposed by |nbsp| :cite:`Hansen1974a`. It is parametrizable by the species 
-depolarization factor :math:`\delta`.
+This model has no parameters.
 
 */
 
@@ -34,103 +26,59 @@ NAMESPACE_BEGIN(mitsuba)
 template <typename Float, typename Spectrum>
 class RayleighPhaseFunction final : public PhaseFunction<Float, Spectrum> {
 public:
-    MTS_IMPORT_BASE(PhaseFunction, m_flags)
+    MTS_IMPORT_BASE(PhaseFunction, m_flags, m_components)
     MTS_IMPORT_TYPES(PhaseFunctionContext)
-
-    using FloatStorage = DynamicBuffer<Float>;
 
     RayleighPhaseFunction(const Properties &props) : Base(props) {
         if constexpr (is_polarized_v<Spectrum>)
-            Log(
-                Warn, 
+            Log(Warn,
                 "Polarized version of Rayleigh phase function not implemented, "
-                "falling back to scalar version"
-            );
+                "falling back to scalar version");
 
-        m_delta = props.float_("delta", 0.f);
-        if (m_delta < 0 || m_delta >= 1)
-            Log(
-                Error, 
-                "The depolarization factor must lie in the interval (0, 1(!"
-            );
         m_flags = +PhaseFunctionFlags::Anisotropic;
-        update();
-    }
-
-    void update() {
-        m_ddelta = m_delta != 0.f ? (1.f - m_delta) / (1.f + 0.5f * m_delta)
-                                  : 1.f;
-        m_a = 3.f * m_ddelta / (16.f * math::Pi<ScalarFloat>);
-        m_b = (1.f - m_ddelta) / (4.f * math::Pi<ScalarFloat>);
-
-        ScalarFloat cos_theta_min = -1.f,
-                    cos_theta_max = 1.f;
-        int n_cos_theta = int(201);
-        auto cos_theta = linspace<FloatStorage>(cos_theta_min, cos_theta_max, n_cos_theta);
-
-        auto phase_func_values = zero<FloatStorage>(n_cos_theta);
-        for (int i = 0; i != n_cos_theta; ++i)
-            phase_func_values[i] = eval_rayleigh_scalar(cos_theta[i]);
-
-        m_table.range() = ScalarVector2f(cos_theta_min, cos_theta_max);
-        m_table.pdf() = phase_func_values;
-        m_table.update();
-    }
-
-    ScalarFloat eval_rayleigh_scalar(ScalarFloat cos_theta) const {
-        return m_a * (1.f + cos_theta * cos_theta) + m_b;
+        m_components.push_back(m_flags);
     }
 
     MTS_INLINE Float eval_rayleigh(Float cos_theta) const {
-        auto result = m_a * (1.f + enoki::sqr(cos_theta)) + m_b;
-        return result;
+        return (3.f / 16.f) * math::InvPi<Float> *
+               (1.f + enoki::sqr(cos_theta));
     }
 
     std::pair<Vector3f, Float> sample(const PhaseFunctionContext & /* ctx */,
-                                      const MediumInteraction3f &mi, 
-                                      const Point2f &sample,
+                                      const MediumInteraction3f &mi,
+                                      Float /* sample1 */,
+                                      const Point2f &sample2,
                                       Mask active) const override {
         MTS_MASKED_FUNCTION(ProfilerPhase::PhaseFunctionSample, active);
 
-        Float cos_theta = m_table.sample(sample.x());
-        Float sin_theta = enoki::safe_sqrt(1.0f - cos_theta * cos_theta);
+        Float z         = 2.f * (2.f * sample2.x() - 1.f);
+        Float tmp       = enoki::sqrt(enoki::sqr(z) + 1.f);
+        Float A         = enoki::cbrt(z + tmp);
+        Float B         = enoki::cbrt(z - tmp);
+        Float cos_theta = A + B;
+        Float sin_theta = enoki::safe_sqrt(1.0f - enoki::sqr(cos_theta));
+        auto [sin_phi, cos_phi] = enoki::sincos(math::TwoPi<Float> * sample2.y());
 
-        auto [sin_phi, cos_phi] = enoki::sincos(2 * math::Pi<ScalarFloat> * sample.y());
-        auto wo = Vector3f(sin_theta * cos_phi, sin_theta * sin_phi, cos_theta);
-        wo = mi.to_world(wo);
-        Float pdf = eval_rayleigh(cos_theta);
-        return std::make_pair(wo, pdf);
+        auto wo = Vector3f{ sin_theta * cos_phi, sin_theta * sin_phi, cos_theta };
+
+        wo        = mi.to_world(wo);
+        Float pdf = eval_rayleigh(-cos_theta);
+        return { wo, pdf };
     }
 
-    Float eval(const PhaseFunctionContext & /* ctx */, const MediumInteraction3f &mi,
-               const Vector3f &wo, Mask active) const override {
+    Float eval(const PhaseFunctionContext & /* ctx */,
+               const MediumInteraction3f &mi, const Vector3f &wo,
+               Mask active) const override {
         MTS_MASKED_FUNCTION(ProfilerPhase::PhaseFunctionEvaluate, active);
         return eval_rayleigh(dot(wo, mi.wi));
     }
 
-    void traverse(TraversalCallback *callback) override {
-        callback->put_parameter("delta", m_delta);
-        update();
-    }
-
-    std::string to_string() const override {
-        std::ostringstream oss;
-        oss << "RayleighPhaseFunction[" << std::endl
-            << "  delta = " << string::indent(m_delta) << std::endl
-            << "]";
-        return oss.str();
-    }
+    std::string to_string() const override { return "RayleighPhaseFunction[]"; }
 
     MTS_DECLARE_CLASS()
 
 private:
-    ScalarFloat m_delta;
-    ScalarFloat m_ddelta;
-    ScalarFloat m_a;
-    ScalarFloat m_b;
-    ContinuousDistribution<Float> m_table;
 };
-
 
 MTS_IMPLEMENT_CLASS_VARIANT(RayleighPhaseFunction, PhaseFunction)
 MTS_EXPORT_PLUGIN(RayleighPhaseFunction, "Rayleigh phase function")
