@@ -4,7 +4,7 @@ import numpy as np
 def test_create(variant_scalar_rgb):
     from mitsuba.core.xml import load_dict
 
-    p = load_dict({"type": "lut", "values": "2, 1, 2"})
+    p = load_dict({"type": "lutphase", "values": "2, 1, 2"})
     assert p is not None
 
 
@@ -14,7 +14,7 @@ def test_eval(variant_scalar_rgb):
     from mitsuba.render import PhaseFunctionContext, MediumInteraction3f
 
     iso = load_dict({"type": "isotropic"})
-    lut = load_dict({"type": "lut", "values": "1, 1, 1"})
+    lut = load_dict({"type": "lutphase", "values": "1, 1, 1"})
     ctx = PhaseFunctionContext(None)
     mi = MediumInteraction3f()
     for theta in np.linspace(0, np.pi / 2, 4):
@@ -29,7 +29,7 @@ def test_chi2(variant_packet_rgb):
     from mitsuba.python.chi2 import PhaseFunctionAdapter, ChiSquareTest, SphericalDomain
 
     sample_func, pdf_func = PhaseFunctionAdapter(
-        "lut", '<string name="values" value="2, 1, 2"/>'
+        "lutphase", '<string name="values" value="2, 1, 2"/>'
     )
 
     chi2 = ChiSquareTest(
