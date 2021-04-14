@@ -1,7 +1,5 @@
-"""Eradiate's Mitsuba-based computational kernel.
-
-The kernel API reference is part of the Mitsuba documentation. Instructions on
-how to access it are found :ref:`here <sec_mitsuba_docs>`.
+"""
+Eradiate's Mitsuba-based computational kernel.
 """
 
 import types
@@ -188,6 +186,11 @@ def variants():
     'Returns a list of all variants that have been compiled'
     from .config import MTS_VARIANTS
     return MTS_VARIANTS
+
+
+# Sentinel variable used to check that the imported mitsuba module is Eradiate's
+# customised version
+ERADIATE_KERNEL = True
 
 
 # Cleanup
