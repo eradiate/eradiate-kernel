@@ -33,8 +33,15 @@ Distant directional sensor (:monosp:`distant`)
    - Sensor-to-world transformation matrix.
  * - direction
    - |vector|
-   - Alternative (and exclusive) to `to_world`. Direction from which the
-     sensor will be recording in world coordinates.
+   - Alternative (and exclusive) to ``to_world``. Direction orienting the sensor's
+     reference hemisphere.
+ * - orientation
+   - |vector|
+   - If ``direction`` is set, this vector parameter can be used to control
+     film orientation. The orientation is given by the projection of
+     ``orientation`` onto the  plane of normal ``direction``, and the up vector
+     defined as :math:`\mathrm{up} = \mathrm{direction} \times \mathrm{orientation}`.
+     If ``direction`` is unset, this parameter has no effect.
  * - flip_directions
    - |bool|
    - If true, flip the directions of sampled rays. Default: false
@@ -247,8 +254,7 @@ public:
             ScalarVector3f up;
 
             if (props.has_property("orientation")) {
-                up = normalize(cross(ScalarVector3f{ 0., 0., 1. },
-                                     props.vector3f("orientation")));
+                up = normalize(cross(direction, props.vector3f("orientation")));
             } else
                 std::tie(std::ignore, up) = coordinate_system(direction);
 
