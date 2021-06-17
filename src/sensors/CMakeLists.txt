@@ -6,6 +6,7 @@ add_plugin(thinlens           thinlens.cpp)
 add_plugin(irradiancemeter    irradiancemeter.cpp)
 add_plugin(distant            distant.cpp)
 add_plugin(radiancemeterarray radiancemeterarray.cpp)
+add_plugin(distantflux        distantflux.cpp)
 
 # Register the test directory
 add_tests(${CMAKE_CURRENT_SOURCE_DIR}/tests)
