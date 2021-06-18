@@ -1,8 +1,0 @@
-version: '3.9'
-
-services:
-  builder:
-    build: .
-    image: "fxia/eradiate-kernel-builder:v1.0.0"
-    volumes:
-      - ./build:/build/eradiate-kernel
