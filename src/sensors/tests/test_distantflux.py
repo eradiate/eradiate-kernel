@@ -348,12 +348,15 @@ def test_checkerboard(variant_scalar_rgb):
         "roughconductor",
     ],
 )
-def test_lobe(variant_scalar_rgb, bsdf):
+@pytest.mark.parametrize(
+    "w_e",
+    [[0, 0, -1], [0, 1, -1]],
+)
+def test_lobe(variant_scalar_rgb, bsdf, w_e):
     # Check if surfaces with a reflecting lobe are also handled correctly
     from mitsuba.core import ScalarTransform4f, Struct, Bitmap
     from mitsuba.core.xml import load_dict
 
-    w_e = [0, 0, -1]
     normal = [0, 0, 1]
 
     # Basic illumination parameters
