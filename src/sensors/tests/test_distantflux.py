@@ -4,28 +4,32 @@ import pytest
 import enoki as ek
 
 
-def sensor_dict(target=None, film="1x1", to_world=None):
+def sensor_dict(target=None, origin=None, film="1x1", to_world=None):
     result = {"type": "distantflux"}
 
     if film == "1x1":
-        result.update({
-            "film": {
-                "type": "hdrfilm",
-                "width": 1,
-                "height": 1,
-                "rfilter": {"type": "box"}
+        result.update(
+            {
+                "film": {
+                    "type": "hdrfilm",
+                    "width": 1,
+                    "height": 1,
+                    "rfilter": {"type": "box"},
+                }
             }
-        })
+        )
 
     elif film == "32x32":
-        result.update({
-            "film": {
-                "type": "hdrfilm",
-                "width": 32,
-                "height": 32,
-                "rfilter": {"type": "box"}
+        result.update(
+            {
+                "film": {
+                    "type": "hdrfilm",
+                    "width": 32,
+                    "height": 32,
+                    "rfilter": {"type": "box"},
+                }
             }
-        })
+        )
 
     if to_world is not None:
         result["to_world"] = to_world
@@ -38,6 +42,9 @@ def sensor_dict(target=None, film="1x1", to_world=None):
 
     elif isinstance(target, dict):
         result.update({"target": target})
+
+    if origin is not None:
+        result.update({"origin": origin})
 
     return result
 
@@ -77,6 +84,101 @@ def test_construct(variant_scalar_rgb):
     # -- Random object target (we expect to raise)
     with pytest.raises(RuntimeError):
         make_sensor(sensor_dict(target={"type": "constant"}))
+
+    # -- Origin control
+    sensor = make_sensor(
+        sensor_dict(
+            origin={
+                "type": "rectangle",
+                "to_world": ScalarTransform4f.translate([0, 0, 1]),
+            }
+        )
+    )
+    assert sensor is not None
+
+    # -- Random object origin (we expect to raise)
+    with pytest.raises(RuntimeError):
+        make_sensor(sensor_dict(origin={"type": "constant"}))
+
+
+def bsphere(bbox):
+    c = bbox.center()
+    return c, ek.norm(c - bbox.max)
+
+
+def test_sample_ray_origin(variant_scalar_rgb):
+    time = 1.0
+    sample_wav = 1.0
+    samples = [
+        [[0.32, 0.87], [0.16, 0.44]],
+        [[0.17, 0.44], [0.22, 0.81]],
+        [[0.12, 0.82], [0.99, 0.42]],
+        [[0.72, 0.40], [0.01, 0.61]],
+    ]
+
+    from mitsuba.core.xml import load_dict
+    from mitsuba.core import ScalarTransform4f
+
+    # Default origin: use bounding sphere to compute ray origins
+    scene_dict = {
+        "type": "scene",
+        "shape": {"type": "rectangle"},
+        "sensor": sensor_dict(),
+    }
+    scene = load_dict(scene_dict)
+    sensor = scene.sensors()[0]
+
+    _, bsphere_radius = bsphere(scene.bbox())
+
+    for (sample1, sample2) in samples:
+        ray, _ = sensor.sample_ray(time, sample_wav, sample1, sample2, True)
+        print(ek.norm(ray.o))
+        assert ek.all(ek.norm(ray.o) > bsphere_radius)
+
+    # Shape origin: we set ray origins to be located on a rectangle located at
+    # an arbitrary z altitude
+    z_offset = 3.42
+
+    scene_dict = {
+        "type": "scene",
+        "shape": {"type": "rectangle"},
+        "sensor": sensor_dict(
+            origin={
+                "type": "rectangle",
+                "to_world": ScalarTransform4f.translate([0, 0, z_offset])
+                * ScalarTransform4f.scale(10)
+                # ^-- scaling ensures that the square covers the entire
+                #     area where target points can be located
+            },
+        ),
+    }
+    scene = load_dict(scene_dict)
+    sensor = scene.sensors()[0]
+
+    for (sample1, sample2) in samples:
+        ray, _ = sensor.sample_ray(time, sample_wav, sample1, sample2, True)
+        assert ek.allclose(ray.o.z, z_offset)
+
+    # Check that wrong origins will lead to invalid rays
+    scene_dict = {
+        "type": "scene",
+        "shape": {"type": "rectangle"},
+        "sensor": sensor_dict(
+            origin={
+                "type": "rectangle",
+                "to_world": ScalarTransform4f.translate([0, 0, -1.0])
+                # ^-- origin surface cannot be reached given ray direction:
+                #     this will always produce invalid origins
+            },
+        ),
+    }
+    scene = load_dict(scene_dict)
+    sensor = scene.sensors()[0]
+
+    for (sample1, sample2) in samples:
+        ray, weights = sensor.sample_ray(time, sample_wav, sample1, sample2, True)
+        assert any(ek.isinf(ray.o))
+        assert ek.allclose(weights, 0.0)
 
 
 def test_sample_ray_direction(variant_scalar_rgb):

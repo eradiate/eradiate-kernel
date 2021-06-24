@@ -91,6 +91,7 @@ public:
 
         props.mark_queried("to_world");
         props.mark_queried("target");
+        props.mark_queried("origin");
     }
 
     // This must be implemented. However, it won't be used in practice:
@@ -156,6 +157,20 @@ public:
             Log(Debug, "No target specified.");
         }
 
+        // Set ray origin
+        if (props.has_property("origin")) {
+            auto obj       = props.object("origin");
+            m_origin_shape = dynamic_cast<Shape *>(obj.get());
+
+            if (!m_origin_shape)
+                Throw("Invalid parameter origin, must be a Shape.");
+            else
+                Log(Debug, "Using bounding sphere for ray origins.");
+
+        } else {
+            m_origin_shape = nullptr;
+        }
+
         // Set reference surface normal (in world coords)
         ScalarTransform4f trafo = props.transform("to_world", ScalarTransform4f());
         m_reference_normal = trafo.transform_affine(ScalarVector3f{0.f, 0.f, 1.f});
@@ -191,15 +206,16 @@ public:
         // Sample target point and position ray origin
         Spectrum ray_weight =
             dot(-ray.d, m_reference_normal) / warp::square_to_uniform_hemisphere_pdf(ray.d);
+        Point3f ray_target = m_target_point;
 
         if constexpr (TargetType == RayTargetType::Point) {
-            ray.o = m_target_point - 2.f * ray.d * m_bsphere.radius;
+            // Target point selection already handled during init
             ray_weight *= wav_weight;
         } else if constexpr (TargetType == RayTargetType::Shape) {
             // Use area-based sampling of shape
             PositionSample3f ps =
                 m_target_shape->sample_position(time, aperture_sample, active);
-            ray.o = ps.p - 2.f * ray.d * m_bsphere.radius;
+            ray_target = ps.p;
             ray_weight *= wav_weight / (ps.pdf * m_target_shape->surface_area());
         } else { // if constexpr (TargetType == RayTargetType::None) {
             // Sample target uniformly on bounding sphere cross section defined
@@ -208,8 +224,21 @@ public:
                 warp::square_to_uniform_disk_concentric(aperture_sample);
             Vector3f perp_offset =
                 trafo.transform_affine(Vector3f(offset.x(), offset.y(), 0.f));
-            ray.o = m_bsphere.center + (perp_offset - ray.d) * m_bsphere.radius;
+            ray_target = m_bsphere.center + perp_offset * m_bsphere.radius;
             ray_weight *= wav_weight;
+        }
+
+        // Set ray origin
+        if (m_origin_shape != nullptr) {
+            // Project target onto origin shape following ray direction
+            Ray3f tmp_ray(ray_target, -ray.d, time);
+            SurfaceInteraction3f si = m_origin_shape->ray_intersect(
+                tmp_ray, HitComputeFlags::Minimal, active);
+            active &= si.is_valid();
+            ray.o = si.p;
+        } else {
+            // Use the scene's bounding sphere to safely position ray origin
+            ray.o = ray_target - ray.d * 2.f * m_bsphere.radius;
         }
 
         return { ray, ray_weight & active };
@@ -264,6 +293,9 @@ public:
         else // if constexpr (TargetType == RayTargetType::None)
             oss << "  target = none" << std::endl;
 
+        if (m_origin_shape != nullptr)
+            oss << "  origin = " << string::indent(m_origin_shape) << std::endl;
+
         oss << "]";
 
         return oss.str();
@@ -276,6 +308,7 @@ protected:
     ref<Shape> m_target_shape;
     Point3f m_target_point;
     Vector3f m_reference_normal;
+    ref<Shape> m_origin_shape;
 };
 
 MTS_IMPLEMENT_CLASS_VARIANT(DistantFluxSensor, Sensor)
