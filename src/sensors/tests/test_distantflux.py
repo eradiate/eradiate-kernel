@@ -352,7 +352,7 @@ def test_sample_ray_target(variant_scalar_rgb, sensor_setup):
         sensor.film()
         .bitmap()
         .convert(Bitmap.PixelFormat.Y, Struct.Type.Float32, False)
-    ).squeeze().mean()
+    ).squeeze().sum()
 
     irradiance = l_e * cos_theta_e  # Irradiance accounting for slanting factor of targeted surface
     expected = {  # Special expected values for some cases
@@ -436,7 +436,7 @@ def test_checkerboard(variant_scalar_rgb):
     sensor = scene.sensors()[0]
     scene.integrator().render(scene, sensor)
 
-    data = np.array(sensor.film().bitmap()).squeeze().mean()
+    data = np.array(sensor.film().bitmap()).squeeze().sum()
 
     expected = irradiance * 0.5 * (rho0 + rho1)
     assert np.allclose(data, expected, atol=1e-3)
@@ -519,7 +519,7 @@ def test_lobe(variant_scalar_rgb, bsdf, w_e):
             .convert(Bitmap.PixelFormat.Y, Struct.Type.Float32, False)
         )
         .squeeze()
-        .mean()
+        .sum()
     )
 
     # Irradiance accounting for slanting factor of targeted surface

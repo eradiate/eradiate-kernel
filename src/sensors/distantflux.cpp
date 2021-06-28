@@ -59,7 +59,7 @@ set to [0, 1, 0].
 
 Using a 1x1 film with a stratified sampler is recommended.
 A different film size can also be used. In that case, the exitant flux is given
-by the mean of all pixel values.
+by the sum of all pixel values.
 
 By default, ray target points are sampled from the cross section of the scene's
 bounding sphere. The ``target`` parameter can be set to restrict ray target
@@ -153,6 +153,7 @@ public:
             Log(Warn, "This sensor is best used with a reconstruction filter "
                       "with a radius of 0.5 or lower (e.g. default box)");
         }
+        m_npixels = m_film->size().x() * m_film->size().y();
 
         // Set ray target if relevant
         if constexpr (TargetType == RayTargetType::Point) {
@@ -216,7 +217,8 @@ public:
 
         // Sample target point and position ray origin
         Spectrum ray_weight =
-            dot(-ray.d, m_reference_normal) / warp::square_to_uniform_hemisphere_pdf(ray.d);
+            dot(-ray.d, m_reference_normal) /
+            (warp::square_to_uniform_hemisphere_pdf(ray.d) * m_npixels);
         Point3f ray_target = m_target_point;
 
         if constexpr (TargetType == RayTargetType::Point) {
@@ -320,6 +322,7 @@ protected:
     Point3f m_target_point;
     Vector3f m_reference_normal;
     ref<Shape> m_origin_shape;
+    size_t m_npixels;
 };
 
 MTS_IMPLEMENT_CLASS_VARIANT(DistantFluxSensor, Sensor)
