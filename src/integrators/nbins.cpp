@@ -50,7 +50,7 @@ template <typename Float, typename Spectrum>
 class NarrowBinsIntegrator final : public SamplingIntegrator<Float, Spectrum> {
 public:
     MTS_IMPORT_BASE(SamplingIntegrator)
-    MTS_IMPORT_TYPES(Scene, Sampler, Medium, Texture)
+    MTS_IMPORT_TYPES(Scene, Sensor, Sampler, Medium, Texture)
 
     NarrowBinsIntegrator(const Properties &props) : Base(props) {
         // If used in nonspectral mode, raise
@@ -94,14 +94,15 @@ public:
         m_tolerance = props.float_("tolerance", 1e-5);
     }
 
-    std::pair<Spectrum, Mask> sample(const Scene *scene, Sampler *sampler,
+    std::pair<Spectrum, Mask> sample(const Scene *scene, const Sensor *sensor,
+                                     Sampler *sampler,
                                      const RayDifferential3f &ray,
                                      const Medium *medium, Float *aovs,
                                      Mask active) const override {
         MTS_MASKED_FUNCTION(ProfilerPhase::SamplingIntegratorSample, active);
 
         auto result =
-            m_integrator->sample(scene, sampler, ray, medium, aovs, active);
+            m_integrator->sample(scene, sensor, sampler, ray, medium, aovs, active);
 
         if constexpr (is_spectral_v<Spectrum>) {
             // Compute bin values

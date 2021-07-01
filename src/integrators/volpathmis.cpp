@@ -62,7 +62,7 @@ class VolpathMisIntegratorImpl final : public MonteCarloIntegrator<Float, Spectr
 
 public:
     MTS_IMPORT_BASE(MonteCarloIntegrator, m_max_depth, m_rr_depth, m_hide_emitters)
-    MTS_IMPORT_TYPES(Scene, Sampler, Emitter, EmitterPtr, BSDF, BSDFPtr,
+    MTS_IMPORT_TYPES(Scene, Sensor, Sampler, Emitter, EmitterPtr, BSDF, BSDFPtr,
                      Medium, MediumPtr, PhaseFunctionContext)
 
     using WeightMatrix =
@@ -84,6 +84,7 @@ public:
     }
 
     std::pair<Spectrum, Mask> sample(const Scene *scene,
+                                     const Sensor * /* sensor */,
                                      Sampler *sampler,
                                      const RayDifferential3f &ray_,
                                      const Medium *initial_medium,

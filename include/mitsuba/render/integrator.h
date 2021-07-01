@@ -78,6 +78,9 @@ public:
      * \param scene
      *    The underlying scene in which the radiance function should be sampled
      *
+     * \param sensor
+     *    The sensor for which radiance is being sampled
+     *
      * \param sampler
      *    A source of (pseudo-/quasi-) random numbers
      *
@@ -108,10 +111,11 @@ public:
      *    In the Python bindings, this function returns the \c aov output
      *    argument as an additional return value. In other words:
      *    <tt>
-     *        (spec, mask, aov) = integrator.sample(scene, sampler, ray, medium, active)
+     *        (spec, mask, aov) = integrator.sample(scene, sensor, sampler, ray, medium, active)
      *    </tt>
      */
     virtual std::pair<Spectrum, Mask> sample(const Scene *scene,
+                                             const Sensor *sensor,
                                              Sampler *sampler,
                                              const RayDifferential3f &ray,
                                              const Medium *medium = nullptr,
