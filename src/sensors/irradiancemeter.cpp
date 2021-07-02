@@ -19,7 +19,7 @@ Irradiance meter (:monosp:`irradiancemeter`)
 
  * - srf
    - |spectrum|
-   - If set, sensor response function used to sample wavelengths from. This 
+   - If set, sensor response function used to sample wavelengths from. This
      parameter is ignored if used with nonspectral variants.
 
 This sensor plugin implements an irradiance meter, which measures
@@ -58,7 +58,7 @@ public:
                           "(not supported for non-spectral variants)");
             }
         }
-        
+
         if (props.has_property("to_world"))
             Throw("Found a 'to_world' transformation -- this is not allowed. "
                   "The irradiance meter inherits this transformation from its parent "
@@ -90,14 +90,14 @@ public:
         // 3. Sample spectrum
         Wavelength wavelengths;
         Spectrum wav_weight;
-        
+
         if (m_srf == nullptr) {
-            std::tie(wavelengths, wav_weight) = 
+            std::tie(wavelengths, wav_weight) =
                 sample_wavelength<Float, Spectrum>(wavelength_sample);
         } else {
-            std::tie(wavelengths, wav_weight) = 
+            std::tie(wavelengths, wav_weight) =
                 m_srf->sample_spectrum(
-                    zero<SurfaceInteraction3f>(), 
+                    zero<SurfaceInteraction3f>(),
                     math::sample_shifted<Wavelength>(wavelength_sample)
                 );
         }
@@ -118,8 +118,12 @@ public:
         return m_shape->pdf_direction(it, ds, active);
     }
 
-    Spectrum eval(const SurfaceInteraction3f &/*si*/, Mask /*active*/) const override {
-        return math::Pi<ScalarFloat> / m_shape->surface_area();
+    Spectrum eval(const SurfaceInteraction3f &si, Mask active) const override {
+        auto cos_theta = Frame3f::cos_theta(si.wi);
+        return Spectrum(math::InvPi<ScalarFloat> * cos_theta) &
+            (cos_theta > 0.f) & si.is_valid() & active;
+        // si is required to be valid and should therefore be created using an
+        // intersection routine with the sensor's shape
     }
 
     ScalarBoundingBox3f bbox() const override { return m_shape->bbox(); }
