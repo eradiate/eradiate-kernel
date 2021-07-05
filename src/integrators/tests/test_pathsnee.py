@@ -33,6 +33,7 @@ def make_scene(scene_id, spp=256, film_resolution=(1, 1)):
             "shape": {
                 "type": "rectangle",
                 "to_world": ScalarTransform4f.scale(2.0),
+                "bsdf": {"type": "diffuse", "reflectance": 0.0},
                 "sensor": sensor_dict,
             },
         }
@@ -42,10 +43,12 @@ def make_scene(scene_id, spp=256, film_resolution=(1, 1)):
         shape_dicts = {
             "square": {
                 "type": "rectangle",
+                "bsdf": {"type": "diffuse", "reflectance": 0.0},
                 "sensor": sensor_dict,
             },
             "occluder": {
                 "type": "rectangle",
+                "bsdf": {"type": "diffuse", "reflectance": 0.0},
                 "to_world": ScalarTransform4f.translate([0, 0, 1]),
             },
         }
@@ -56,16 +59,18 @@ def make_scene(scene_id, spp=256, film_resolution=(1, 1)):
             "sphere": {
                 "type": "sphere",
                 "flip_normals": True,
-                "to_world": ScalarTransform4f.scale(2.0),
+                "radius": 2.0,
+                "bsdf": {"type": "diffuse", "reflectance": 0.0},
                 "sensor": sensor_dict,
             }
         }
-        emitter_dict = {"type": "point"}
+        emitter_dict = {"type": "point", "intensity": 1.0}
 
     elif scene_id == "sphere":
         shape_dicts = {
             "sphere": {
                 "type": "sphere",
+                "bsdf": {"type": "diffuse", "reflectance": 0.0},
                 "sensor": sensor_dict,
             }
         }
@@ -89,8 +94,8 @@ def make_scene(scene_id, spp=256, film_resolution=(1, 1)):
     [
         ("square", 256, 1.0),  # A simple square illuminated by a directional light
         ("square_occluded", 256, 0.0),  # Same as previous with an occluder
-        ("sphere", 256, 0.25),  # A sphere illuminated by a directional light
-        ("sphere_dyson", 25600, 0.25),  # A sphere with flipped normal and a point light at its center
+        ("sphere", 10000, 0.25),  # A sphere illuminated by a directional light
+        ("sphere_dyson", 256, 0.25),  # A sphere with flipped normal and a point light at its center
     ],
 )
 def test_sensor_nee(variant_scalar_rgb, scene_id, spp, expected):
@@ -100,11 +105,11 @@ def test_sensor_nee(variant_scalar_rgb, scene_id, spp, expected):
     scene.integrator().render(scene, sensor)
     result = np.array(sensor.film().bitmap()).squeeze()
     rtol = {
-        "square": 1e-3,
-        "sphere": 1e-3,
-        "sphere_dyson": 1e-3,
+        "square": 1e-4,
+        "sphere_dyson": 1e-4,
+        "sphere": 5e-3,
     }.get(scene_id, 1e-5)
     atol = {
-        "square_occluded": 1e-5,
+        # "square_occluded": 1e-5,
     }.get(scene_id, 1e-8)
     assert np.allclose(result, expected, rtol=rtol, atol=atol)

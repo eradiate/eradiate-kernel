@@ -98,7 +98,7 @@ public:
     PathIntegrator(const Properties &props) : Base(props) { }
 
     std::pair<Spectrum, Mask> sample(const Scene *scene,
-                                     const Sensor * /* sensor */,
+                                     const Sensor *sensor,
                                      Sampler *sampler,
                                      const RayDifferential3f &ray_,
                                      const Medium * /* medium */,
@@ -116,9 +116,32 @@ public:
 
         Spectrum throughput(1.f), result(0.f);
 
+        // Compute NEE contribution due to direct sensor illumination
+        // -- Create fake surface interaction at sensor location
+        auto si = zero<SurfaceInteraction3f>();
+        si.p = ray.o;
+        // -- Sample emitter
+        auto [ds, emitter_val] = scene->sample_emitter_direction(
+            si, sampler->next_2d(active), true, active);
+        // -- Compute sensor importance value
+        if (sensor->shape()) {
+            // In that case we may need the local normal so we compute it using
+            // the intersection routine
+            SurfaceInteraction3f si_tmp(si);
+            si_tmp.p += ds.d * 10.0 * math::ShadowEpsilon<ScalarFloat>;
+            si = sensor->shape()->ray_intersect(si_tmp.spawn_ray(-ds.d));
+        }
+        Spectrum sensor_val = sensor->eval(si, active);
+        // -- Compute sensor PDF for sampled direction
+        Float sensor_pdf = sensor->pdf_direction(si, ds, active);
+        // -- Apply MIS if relevant
+        Float mis = select(ds.delta, 1.f, mis_weight(ds.pdf, sensor_pdf));
+        // -- Accumulate contribution
+        result[active] += mis * sensor_val * emitter_val;
+
         // ---------------------- First intersection ----------------------
 
-        SurfaceInteraction3f si = scene->ray_intersect(ray, active);
+        si = scene->ray_intersect(ray, active);
         Mask valid_ray = si.is_valid();
         EmitterPtr emitter = si.emitter(scene);
 
