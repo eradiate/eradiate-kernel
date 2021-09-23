@@ -12,26 +12,22 @@ NAMESPACE_BEGIN(mitsuba)
 
 enum class RayTargetType { Shape, Point, None };
 
-// Forward declaration of specialized DistantSensor
+// Forward declaration of specialized HemisphericalDistantSensor
 template <typename Float, typename Spectrum, RayTargetType TargetType>
-class DistantSensorImpl;
+class HemisphericalDistantSensorImpl;
 
 /**!
 
-.. _sensor-distant:
+.. _sensor-hdistant:
 
-Distant radiance meter (:monosp:`distant`)
-------------------------------------------
+Hemispherical distant radiance meter (:monosp:`hdistant`)
+---------------------------------------------------------
 
 .. pluginparameters::
 
  * - to_world
    - |transform|
    - Sensor-to-world transformation matrix.
- * - direction
-   - |vector|
-   - Alternative (and exclusive) to ``to_world``. Direction orienting the
-     sensor's reference hemisphere.
  * - target
    - |point| or nested :paramtype:`shape` plugin
    - *Optional.* Define the ray target sampling strategy.
@@ -42,9 +38,90 @@ Distant radiance meter (:monosp:`distant`)
      surface.
 
 This sensor plugin implements a distant directional sensor which records
-radiation leaving the scene in a given direction. It records the spectral
-radiance leaving the scene in the specified direction. It is the adjoint to the
-``directional`` emitter.
+radiation leaving the scene. It records the spectral radiance leaving the scene
+in directions covering a hemisphere defined by its ``to_world`` parameter and
+mapped to film coordinates. To some extent, it can be seen as the adjoint to
+the ``envmap`` emitter.
+
+The ``to_world`` transform is best set using a
+:py:meth:`~mitsuba.core.Transform4f.look_at`. The default orientation covers a
+hemisphere defined by the [0, 0, 1] direction, and the ``up`` film direction is
+set to [0, 1, 0].
+
+The following XML snippet creates a scene with a ``roughconductor``
+surface illuminated by three ``directional`` emitter, each emitting in
+a single RGB channel. A ``hdistant`` plugin with default orientation is
+defined.
+
+.. subfigstart::
+
+.. subfigure:: ../../resources/data-extra/docs/images/sensor/sensor_hdistant_illumination_optimized.svg
+   :caption: Example scene illumination setup
+
+.. subfigend::
+   :label: fig-hdistant-illumination
+
+.. code:: xml
+
+    <scene version="2.1.0">
+        <sensor type="hdistant" id="hdistant">
+            <transform name="to_world">
+                <lookat origin="0, 0, 0" target="0, 0, 1" up="0, 1, 0"/>
+            </transform>
+            <sampler type="independent">
+                <integer name="sample_count" value="3200"/>
+            </sampler>
+            <film type="hdrfilm">
+                <integer name="width" value="32"/>
+                <integer name="height" value="32"/>
+                <string name="pixel_format" value="rgb"/>
+                <string name="component_format" value="float32"/>
+                <rfilter type="box"/>
+            </film>
+        </sensor>
+        <integrator type="path"/>
+
+        <emitter type="directional">
+            <vector name="direction" x="1" y="0" z="-1"/>
+            <rgb name="irradiance" value="1, 0, 0"/>
+        </emitter>
+        <emitter type="directional">
+            <vector name="direction" x="1" y="1" z="-1"/>
+            <rgb name="irradiance" value="0, 1, 0"/>
+        </emitter>
+        <emitter type="directional">
+            <vector name="direction" x="0" y="1" z="-1"/>
+            <rgb name="irradiance" value="0, 0, 1   "/>
+        </emitter>
+
+        <shape type="rectangle">
+            <bsdf type="roughconductor"/>
+        </shape>
+    </scene>
+
+The following figures show the recorded exitant radiance with the default film
+orientation (left, ``up = [0,1,0]``) and with a rotated film (right,
+``up = [1,1,0]``). Colored dots on the plots materialize emitter directions.
+The orange arrow represents the ``up`` direction on the film.
+Note that on the plots, the origin of pixel coordinates is taken at the bottom
+left.
+
+.. subfigstart::
+
+.. subfigure:: ../../resources/data-extra/docs/images/sensor/sensor_hdistant_film_default_optimized.svg
+   :caption: Default film orientation
+
+.. subfigure:: ../../resources/data-extra/docs/images/sensor/sensor_hdistant_film_rotated_optimized.svg
+   :caption: Rotated film
+
+.. subfigure:: ../../resources/data-extra/docs/images/sensor/sensor_hdistant_default.svg
+   :caption: Exitant radiance
+
+.. subfigure:: ../../resources/data-extra/docs/images/sensor/sensor_hdistant_rotated.svg
+   :caption: Exitant radiance
+
+.. subfigend::
+   :label: fig-hdistant-film
 
 By default, ray target points are sampled from the cross section of the scene's
 bounding sphere. The ``target`` parameter can be set to restrict ray target
@@ -63,12 +140,13 @@ Ray origins are positioned outside of the scene's geometry.
 */
 
 template <typename Float, typename Spectrum>
-class DistantSensor final : public Sensor<Float, Spectrum> {
+class HemisphericalDistantSensor final : public Sensor<Float, Spectrum> {
 public:
     MTS_IMPORT_BASE(Sensor, m_world_transform, m_film)
     MTS_IMPORT_TYPES(Scene, Shape)
 
-    DistantSensor(const Properties &props) : Base(props), m_props(props) {
+    HemisphericalDistantSensor(const Properties &props)
+        : Base(props), m_props(props) {
 
         // Get target
         if (props.has_property("target")) {
@@ -85,18 +163,17 @@ public:
             m_target_type = RayTargetType::None;
         }
 
-        props.mark_queried("direction");
         props.mark_queried("to_world");
         props.mark_queried("target");
     }
 
     // This must be implemented. However, it won't be used in practice:
-    // instead, DistantSensorImpl::bbox() is used when the plugin is
-    // instantiated.
+    // instead, HemisphericalDistantSensorImpl::bbox() is used when the plugin
+    // is instantiated.
     ScalarBoundingBox3f bbox() const override { return ScalarBoundingBox3f(); }
 
     template <RayTargetType TargetType>
-    using Impl = DistantSensorImpl<Float, Spectrum, TargetType>;
+    using Impl = HemisphericalDistantSensorImpl<Float, Spectrum, TargetType>;
 
     // Recursively expand into an implementation specialized to the target
     // specification.
@@ -126,39 +203,22 @@ protected:
 };
 
 template <typename Float, typename Spectrum, RayTargetType TargetType>
-class DistantSensorImpl final : public Sensor<Float, Spectrum> {
+class HemisphericalDistantSensorImpl final : public Sensor<Float, Spectrum> {
 public:
     MTS_IMPORT_BASE(Sensor, m_world_transform, m_film)
     MTS_IMPORT_TYPES(Scene, Shape)
 
-    DistantSensorImpl(const Properties &props) : Base(props) {
-        // Check film size
-        if (m_film->size() != ScalarPoint2i(1, 1))
-            Throw("This sensor only supports films of size 1x1 Pixels!");
-
+    HemisphericalDistantSensorImpl(const Properties &props) : Base(props) {
         // Check reconstruction filter radius
         if (m_film->reconstruction_filter()->radius() >
             0.5f + math::RayEpsilon<Float>) {
-            Log(Warn, "This sensor should be used with a reconstruction filter "
+            Log(Warn, "This sensor is best used with a reconstruction filter "
                       "with a radius of 0.5 or lower (e.g. default box)");
         }
 
-        // Compute transform, possibly based on direction parameter
-        if (props.has_property("direction")) {
-            if (props.has_property("to_world")) {
-                Throw("Only one of the parameters 'direction' and 'to_world'"
-                      "can be specified at the same time!'");
-            }
-
-            ScalarVector3f direction(normalize(props.vector3f("direction")));
-            ScalarVector3f up;
-
-            std::tie(std::ignore, up) = coordinate_system(direction);
-
-            m_world_transform =
-                new AnimatedTransform(ScalarTransform4f::look_at(
-                    ScalarPoint3f(0.0f), ScalarPoint3f(direction), up));
-        }
+        // Store film sample location spacing for performance
+        m_d.x() = 1.0f / m_film->size().x();
+        m_d.y() = 1.0f / m_film->size().y();
 
         // Set ray target if relevant
         if constexpr (TargetType == RayTargetType::Point) {
@@ -179,11 +239,45 @@ public:
         m_bsphere = scene->bbox().bounding_sphere();
         m_bsphere.radius =
             max(math::RayEpsilon<Float>,
-                m_bsphere.radius * (1.f + math::RayEpsilon<Float>) );
+                    m_bsphere.radius * (1.f + math::RayEpsilon<Float>) );
+    }
+
+    // Ray sampling with spectral sampling removed
+    std::pair<Vector3f, Point3f>
+    sample_ray_dir_origin(Float time, const Point2f &film_sample,
+                          const Point2f &aperture_sample, Mask active) const {
+        MTS_MASK_ARGUMENT(active);
+
+        // Sample ray direction
+        Transform4f trafo = m_world_transform->eval(time, active);
+        Vector3f direction = -trafo.transform_affine(
+            warp::square_to_uniform_hemisphere(film_sample));
+
+        // Sample target point and position ray origin
+        Point3f origin;
+
+        if constexpr (TargetType == RayTargetType::Point) {
+            origin = m_target_point - 2.f * direction * m_bsphere.radius;
+        } else if constexpr (TargetType == RayTargetType::Shape) {
+            // Use area-based sampling of shape
+            PositionSample3f ps =
+                m_target_shape->sample_position(time, aperture_sample, active);
+            origin = ps.p - 2.f * direction * m_bsphere.radius;
+        } else { // if constexpr (TargetType == RayTargetType::None) {
+            // Sample target uniformly on bounding sphere cross section
+            Point2f offset =
+                warp::square_to_uniform_disk_concentric(aperture_sample);
+            Vector3f perp_offset = trafo.transform_affine(
+                Vector3f(offset.x(), offset.y(), 0.f));
+            origin = m_bsphere.center + perp_offset * m_bsphere.radius -
+                     direction * m_bsphere.radius;
+        }
+
+        return { direction, origin };
     }
 
     std::pair<Ray3f, Spectrum> sample_ray(Float time, Float wavelength_sample,
-                                          const Point2f & /*film_sample*/,
+                                          const Point2f &film_sample,
                                           const Point2f &aperture_sample,
                                           Mask active) const override {
         MTS_MASK_ARGUMENT(active);
@@ -196,14 +290,15 @@ public:
             sample_wavelength<Float, Spectrum>(wavelength_sample);
         ray.wavelengths = wavelengths;
 
-        // Sample ray origin
-        Spectrum ray_weight = 0.f;
 
-        // Set ray direction
+        // Sample ray direction
         Transform4f trafo = m_world_transform->eval(time, active);
-        ray.d             = trafo.transform_affine(Vector3f{ 0.f, 0.f, 1.f });
+        ray.d             = -trafo.transform_affine(
+            warp::square_to_uniform_hemisphere(film_sample));
 
         // Sample target point and position ray origin
+        Spectrum ray_weight = 0.f;
+
         if constexpr (TargetType == RayTargetType::Point) {
             ray.o      = m_target_point - 2.f * ray.d * m_bsphere.radius;
             ray_weight = wav_weight;
@@ -217,15 +312,14 @@ public:
             // Sample target uniformly on bounding sphere cross section
             Point2f offset =
                 warp::square_to_uniform_disk_concentric(aperture_sample);
-            Vector3f perp_offset =
-                trafo.transform_affine(Vector3f{ offset.x(), offset.y(), 0.f });
+            Vector3f perp_offset = trafo.transform_affine(
+                Vector3f(offset.x(), offset.y(), 0.f));
             ray.o = m_bsphere.center + perp_offset * m_bsphere.radius -
                     ray.d * m_bsphere.radius;
             ray_weight = wav_weight;
         }
 
         ray.update();
-
         return { ray, ray_weight & active };
     }
 
@@ -240,8 +334,16 @@ public:
         std::tie(ray, ray_weight) = sample_ray(
             time, wavelength_sample, film_sample, aperture_sample, active);
 
-        // Since the film size is always 1x1, we don't have differentials
-        ray.has_differentials = false;
+        // Compute ray differentials
+        ray.has_differentials = true;
+
+        Point2f film_sample_x{ film_sample.x() + m_d.x(), film_sample.y() };
+        std::tie(ray.d_x, ray.o_x) =
+            sample_ray_dir_origin(time, film_sample_x, aperture_sample, active);
+
+        Point2f film_sample_y{ film_sample.x(), film_sample.y() + m_d.y() };
+        std::tie(ray.d_y, ray.o_y) =
+            sample_ray_dir_origin(time, film_sample_y, aperture_sample, active);
 
         return { ray, ray_weight & active };
     }
@@ -252,8 +354,8 @@ public:
 
     std::string to_string() const override {
         std::ostringstream oss;
-        oss << "DistantSensor[" << std::endl
-            << "  world_transform = " << string::indent(m_world_transform) << "," << std::endl
+        oss << "HemisphericalDistantSensor[" << std::endl
+            << "  to_world = " << string::indent(m_world_transform) << "," << std::endl
             << "  film = " << string::indent(m_film) << "," << std::endl;
 
         if constexpr (TargetType == RayTargetType::Point)
@@ -271,34 +373,41 @@ public:
     MTS_DECLARE_CLASS()
 
 protected:
+    // Scene bounding sphere
     ScalarBoundingSphere3f m_bsphere;
+    // Target shape if any
     ref<Shape> m_target_shape;
+    // Target point if any
     Point3f m_target_point;
+    // Spacing between two pixels in film coordinates
+    ScalarPoint2f m_d;
 };
 
-MTS_IMPLEMENT_CLASS_VARIANT(DistantSensor, Sensor)
-MTS_EXPORT_PLUGIN(DistantSensor, "DistantSensor")
+MTS_IMPLEMENT_CLASS_VARIANT(HemisphericalDistantSensor, Sensor)
+MTS_EXPORT_PLUGIN(HemisphericalDistantSensor, "HemisphericalDistantSensor")
 
 NAMESPACE_BEGIN(detail)
 template <RayTargetType TargetType>
 constexpr const char *distant_sensor_class_name() {
     if constexpr (TargetType == RayTargetType::Shape) {
-        return "DistantSensor_Shape";
+        return "HemisphericalDistantSensor_Shape";
     } else if constexpr (TargetType == RayTargetType::Point) {
-        return "DistantSensor_Point";
+        return "HemisphericalDistantSensor_Point";
     } else if constexpr (TargetType == RayTargetType::None) {
-        return "DistantSensor_NoTarget";
+        return "HemisphericalDistantSensor_NoTarget";
     }
 }
 NAMESPACE_END(detail)
 
 template <typename Float, typename Spectrum, RayTargetType TargetType>
-Class *DistantSensorImpl<Float, Spectrum, TargetType>::m_class = new Class(
-    detail::distant_sensor_class_name<TargetType>(), "Sensor",
-    ::mitsuba::detail::get_variant<Float, Spectrum>(), nullptr, nullptr);
+Class *HemisphericalDistantSensorImpl<Float, Spectrum, TargetType>::m_class =
+    new Class(detail::distant_sensor_class_name<TargetType>(), "Sensor",
+              ::mitsuba::detail::get_variant<Float, Spectrum>(), nullptr,
+              nullptr);
 
 template <typename Float, typename Spectrum, RayTargetType TargetType>
-const Class *DistantSensorImpl<Float, Spectrum, TargetType>::class_() const {
+const Class *
+HemisphericalDistantSensorImpl<Float, Spectrum, TargetType>::class_() const {
     return m_class;
 }
 
