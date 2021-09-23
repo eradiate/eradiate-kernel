@@ -7,10 +7,10 @@ NAMESPACE_BEGIN(mitsuba)
 
 /**!
 
-.. _phase-lut:
+.. _phase-tabphase:
 
-Lookup table phase function (:monosp:`lut`)
--------------------------------------------
+Tabulated table phase function (:monosp:`tabphase`)
+---------------------------------------------------
 
 .. pluginparameters::
 
@@ -33,12 +33,12 @@ function of the cosine of the scattering angle.
 */
 
 template <typename Float, typename Spectrum>
-class LUTPhaseFunction final : public PhaseFunction<Float, Spectrum> {
+class TabulatedPhaseFunction final : public PhaseFunction<Float, Spectrum> {
 public:
     MTS_IMPORT_BASE(PhaseFunction, m_flags, m_components)
     MTS_IMPORT_TYPES(PhaseFunctionContext)
 
-    LUTPhaseFunction(const Properties &props) : Base(props) {
+    TabulatedPhaseFunction(const Properties &props) : Base(props) {
         if (props.type("values") == Properties::Type::String) {
             std::vector<std::string> values_str =
                 string::tokenize(props.string("values"), " ,");
@@ -75,7 +75,7 @@ public:
         auto [sin_phi, cos_phi] =
             enoki::sincos(2.f * math::Pi<ScalarFloat> * sample2.y());
         auto wo = Vector3f(sin_theta * cos_phi, sin_theta * sin_phi, cos_theta);
-        wo      = mi.to_world(wo);
+        wo      = -mi.to_world(wo);
         Float pdf = m_distr.eval_pdf_normalized(-cos_theta, active) *
                     math::InvTwoPi<ScalarFloat>;
 
@@ -92,13 +92,13 @@ public:
                math::InvTwoPi<ScalarFloat>;
     }
 
-    void traverse(TraversalCallback * /* callback */) override {
-        NotImplementedError("traverse");
+    void traverse(TraversalCallback *callback) override {
+        callback->put_parameter("values", m_distr.pdf());
     }
 
     std::string to_string() const override {
         std::ostringstream oss;
-        oss << "LUTPhaseFunction[" << std::endl
+        oss << "TabulatedPhaseFunction[" << std::endl
             << "  distr = " << string::indent(m_distr) << std::endl
             << "]";
         return oss.str();
@@ -109,6 +109,6 @@ private:
     ContinuousDistribution<Float> m_distr;
 };
 
-MTS_IMPLEMENT_CLASS_VARIANT(LUTPhaseFunction, PhaseFunction)
-MTS_EXPORT_PLUGIN(LUTPhaseFunction, "Lookup table-based phase function")
+MTS_IMPLEMENT_CLASS_VARIANT(TabulatedPhaseFunction, PhaseFunction)
+MTS_EXPORT_PLUGIN(TabulatedPhaseFunction, "Lookup table-based phase function")
 NAMESPACE_END(mitsuba)
