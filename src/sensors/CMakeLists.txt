@@ -5,7 +5,7 @@ add_plugin(radiancemeter      radiancemeter.cpp)
 add_plugin(thinlens           thinlens.cpp)
 add_plugin(irradiancemeter    irradiancemeter.cpp)
 add_plugin(distant            distant.cpp)
-add_plugin(radiancemeterarray radiancemeterarray.cpp)
+add_plugin(mradiancemeter     mradiancemeter.cpp)
 add_plugin(distantflux        distantflux.cpp)
 
 # Register the test directory

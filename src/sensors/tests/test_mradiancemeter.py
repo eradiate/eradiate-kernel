@@ -1,12 +1,11 @@
 import enoki as ek
 import pytest
-import mitsuba
 import random
 
 
 def dict_sensor(orig, dirs, pixels):
     dict = {
-        "type": "radiancemeterarray",
+        "type": "mradiancemeter",
         "origins": orig,
         "directions": dirs,
         "film": {
@@ -29,7 +28,7 @@ def dict_scene(origins, directions, width, spp, radiance):
             "type": "path"
         },
         "sensor": {
-            "type": "radiancemeterarray",
+            "type": "mradiancemeter",
             "origins": origins,
             "directions": directions,
             "film": {
@@ -85,7 +84,7 @@ def test_instantiation(variant_scalar_rgb):
 
 def test_ray_sampling(variant_scalar_rgb):
     """Test ray sampling by instantiating a sensor with two components. We sample
-    rays with different values for the position sample and assert, that the 
+    rays with different values for the position sample and assert, that the
     correct component is picked."""
 
     from mitsuba.core.xml import load_dict
@@ -107,48 +106,49 @@ def test_ray_sampling(variant_scalar_rgb):
             assert ek.allclose(ray.d, ek.normalize((1., 1., 1.)))
 
 
-def test_many_sensors(variant_scalar_rgb):
-    """Test rendering with a large number of radiancemeters"""
+# Commented until refactored (unreliable outcome)
+# def test_many_sensors(variant_scalar_rgb):
+#     """Test rendering with a large number of radiancemeters"""
+#
+#     from mitsuba.core import set_thread_count
+#     from mitsuba.core.xml import load_dict
+#     import numpy as np
+#     import time
 
-    from mitsuba.core import set_thread_count
-    from mitsuba.core.xml import load_dict
-    import numpy as np
-    import time
+#     num_sensors = 360 * 90
+#     max_threads = 4
+#     orig_list = list()
+#     dir_list = list()
+#     for i in range(num_sensors):
+#         num1 = np.random.rand()
+#         num2 = np.random.rand()
+#         num3 = np.random.rand()
+#         orig_list.append(f"{num1}, {num2}, {num3}, ")
+#         dir_list.append(f"{-num1}, {-num2}, {-num3}, ")
 
-    num_sensors = 360 * 90
-    max_threads = 4
-    orig_list = list()
-    dir_list = list()
-    for i in range(num_sensors):
-        num1 = np.random.rand()
-        num2 = np.random.rand()
-        num3 = np.random.rand()
-        orig_list.append(f"{num1}, {num2}, {num3}, ")
-        dir_list.append(f"{-num1}, {-num2}, {-num3}, ")
+#     origins = "".join(orig_list)
+#     directions = "".join(dir_list)
 
-    origins = "".join(orig_list)
-    directions = "".join(dir_list)
+#     scene_dict = dict_scene(origins, directions, num_sensors, 5, 100)
 
-    scene_dict = dict_scene(origins, directions, num_sensors, 5, 100)
+#     scene = load_dict(scene_dict)
+#     sensor = scene.sensors()[0]
 
-    scene = load_dict(scene_dict)
-    sensor = scene.sensors()[0]
+#     set_thread_count(1)
+#     start1 = time.time()
+#     scene.integrator().render(scene, sensor)
+#     stop1 = time.time()
+#     time1 = stop1 - start1
 
-    set_thread_count(1)
-    start1 = time.time()
-    scene.integrator().render(scene, sensor)
-    stop1 = time.time()
-    time1 = stop1 - start1
+#     set_thread_count(max_threads)
+#     start2 = time.time()
+#     scene.integrator().render(scene, sensor)
+#     stop2 = time.time()
+#     time2 = stop2 - start2
 
-    set_thread_count(max_threads)
-    start2 = time.time()
-    scene.integrator().render(scene, sensor)
-    stop2 = time.time()
-    time2 = stop2 - start2
+#     ratio = time1 / time2
 
-    ratio = time1 / time2
-
-    assert np.isclose(ratio, (max_threads), atol=1)
+#     assert np.isclose(ratio, (max_threads), atol=1)
 
 
 @pytest.mark.parametrize("radiance", [10**x for x in range(-3, 4)])
@@ -169,7 +169,7 @@ def test_render(variant_scalar_rgb, radiance):
 
 def test_render_complex(variant_scalar_rgb):
     # Test render results for a more complex scene.
-    # The radiancemeterarray has three components, pointing at three
+    # The mradiancemeter has three components, pointing at three
     # surfaces with different reflectances.
 
     from mitsuba.core.xml import load_dict
@@ -182,7 +182,7 @@ def test_render_complex(variant_scalar_rgb):
             "type": "path"
         },
         "sensor": {
-            "type": "radiancemeterarray",
+            "type": "mradiancemeter",
             "origins": "-2, 0, 1, 0, 0, 1, 2, 0, 1",
             "directions": "0, 0, -1, 0, 0, -1 0, 0, -1",
             "film": {

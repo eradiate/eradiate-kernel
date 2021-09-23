@@ -11,10 +11,10 @@ NAMESPACE_BEGIN(mitsuba)
 
 /**!
 
-.. _sensor-radiancemeterarray:
+.. _sensor-mradiancemeter:
 
-Radiance meter (:monosp:`radiancemeterarray`)
----------------------------------------------
+Multi radiance meter (:monosp:`mradiancemeter`)
+-----------------------------------------------
 
 .. pluginparameters::
 
@@ -28,23 +28,21 @@ Radiance meter (:monosp:`radiancemeterarray`)
    - Comma separated list of directions in which the sensors are pointing in
      world coordinates.
 
-This sensor plugin implements multiple radiance meters, as implemented in the
-:monosp:`radiancemeter` plugin.
-
-This sensor allows using the inherent parallelization of Mitsuba2, which is not
-possible with the :monosp.`radiancemeter` due to its film size of 1x1.
+This sensor plugin aggregates multiple radiance meters. It makes it possible to
+benefit from film-based parallelization when using radiance meters, which is not
+possible with the :monosp:`radiancemeter` plugin due to its film size of 1x1.
 
 The origin points and direction vectors for this sensor are specified as a list
 of floating point values, where three subsequent values will be grouped into a
 point or vector respectively.
 
-The following snippet shows how to specify a :monosp:`radiancemeterarray` with
+The following snippet shows how to specify a :monosp:`mradiancemeter` with
 two sensors, one located at (1, 0, 0) and pointing in the direction (-1, 0, 0),
 the other located at (0, 1, 0) and pointing in the direction (0, -1, 0).
 
 .. code-block:: xml
 
-    <sensor version="2.0.0" type="radiancemeterarray">
+    <sensor version="2.0.0" type="mradiancemeter">
         <string name="origins" value="1, 0, 0, 0, 1, 0"/>
         <string name="directions" value="-1, 0, 0, 0, -1, 0"/>
         <film type="hdrfilm">
@@ -55,7 +53,6 @@ the other located at (0, 1, 0) and pointing in the direction (0, -1, 0).
     </sensor>
 
 .. code-block:: xml
-    :name: sphere-meter
 
     <shape type="sphere">
         <sensor type="irradiancemeter">
@@ -65,7 +62,7 @@ the other located at (0, 1, 0) and pointing in the direction (0, -1, 0).
 
 */
 
-MTS_VARIANT class RadianceMeterArray final : public Sensor<Float, Spectrum> {
+MTS_VARIANT class MultiRadianceMeter final : public Sensor<Float, Spectrum> {
 public:
     MTS_IMPORT_BASE(Sensor, m_film, m_world_transform, m_needs_sample_2,
                     m_needs_sample_3)
@@ -75,11 +72,10 @@ public:
     using TransformStorage = DynamicBuffer<Matrix>;
     using Index            = int32_array_t<Float>;
 
-    RadianceMeterArray(const Properties &props) : Base(props) {
+    MultiRadianceMeter(const Properties &props) : Base(props) {
         if (props.has_property("to_world")) {
             Throw("This sensor is specified through a set of origin and "
-                  "direction "
-                  "values and cannot use the to_world transform.");
+                  "direction values and cannot use the to_world transform.");
         }
 
         std::vector<std::string> origins_str =
@@ -98,7 +94,7 @@ public:
                   "are not equal.",
                   origins_str.size(), directions_str.size());
 
-        m_sensor_count = origins_str.size() / 3.;
+        m_sensor_count = origins_str.size() / 3;
         m_transforms   = empty<TransformStorage>(m_sensor_count * 16);
         m_transforms.managed();
 
@@ -121,10 +117,10 @@ public:
             memcpy(&m_transforms[i * 16], &transform, sizeof(ScalarFloat) * 16);
         }
 
-        if (m_film->size() != ScalarPoint2i(m_transforms.size() / 16, 1))
-            Throw("Film size must be [n_radiancemeters, 1]. Expected %s, "
-                  "found: %s",
-                  ScalarPoint2i(m_transforms.size() / 16, 1), m_film->size());
+        if (m_film->size() != ScalarPoint2i(m_sensor_count, 1))
+            Throw("Film size must be [sensor_count, 1]. Expected %s, "
+                  "got %s",
+                  ScalarPoint2i(m_sensor_count, 1), m_film->size());
 
         if (m_film->reconstruction_filter()->radius() >
             0.5f + math::RayEpsilon<Float>)
@@ -199,9 +195,9 @@ public:
 
     std::string to_string() const override {
         std::ostringstream oss;
-        oss << "RadianceMeterArray[" << std::endl
-            << "  transforms = " << m_transforms << "," << std::endl
-            << "  film = " << m_film << "," << std::endl
+        oss << "MultiRadianceMeter[" << std::endl
+            << "  transforms = " << string::indent(m_transforms) << "," << std::endl
+            << "  film = " << string::indent(m_film) << "," << std::endl
             << "]";
         return oss.str();
     }
@@ -212,7 +208,7 @@ private:
     size_t m_sensor_count;
 };
 
-MTS_IMPLEMENT_CLASS_VARIANT(RadianceMeterArray, Sensor)
-MTS_EXPORT_PLUGIN(RadianceMeterArray, "RadianceMeterArray");
+MTS_IMPLEMENT_CLASS_VARIANT(MultiRadianceMeter, Sensor)
+MTS_EXPORT_PLUGIN(MultiRadianceMeter, "MultiRadianceMeter");
 
 NAMESPACE_END(mitsuba)
