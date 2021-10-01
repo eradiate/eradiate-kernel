@@ -18,7 +18,7 @@ class DistantFluxSensorImpl;
 
 /**!
 
-.. _sensor-distant:
+.. _sensor-distantflux:
 
 Distant fluxmeter sensor (:monosp:`distantflux`)
 ------------------------------------------------
