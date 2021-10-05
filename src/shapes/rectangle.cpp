@@ -193,7 +193,10 @@ public:
         SurfaceInteraction3f si = zero<SurfaceInteraction3f>();
         si.t = select(active, pi.t, math::Infinity<Float>);
 
-        si.p = ray(pi.t);
+        // Re-project onto the rectangle to improve accuracy
+        Point3f p = ray(pi.t);
+        Float dist = dot(m_to_world.translation() - p, m_frame.n);
+        si.p = fmadd(m_frame.n, dist, p);
 
         si.n          = m_frame.n;
         si.sh_frame.n = m_frame.n;
