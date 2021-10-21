@@ -40,7 +40,7 @@ information, which is then mapped onto the shape based on its UV
 parameterization. When no parameters are specified, the model uses the default
 values of :math:`\rho_0 = 0.1`, :math:`k = 0.1` and :math:`g = 0.0`
 
-This plugin also supports the most common extension to four parameters, namely the 
+This plugin also supports the most common extension to four parameters, namely the
 :math:`\rho_c` extension, as used in :cite:`Widlowski2006Rayspread`.
 
 For the fundamental formulae defining the RPV model please refer to the Eradiate
@@ -126,14 +126,16 @@ public:
                       2.f * tan_theta1 * tan_theta2 * cos_phi1_minus_phi2);
         Float cos_g = cos_theta1 * cos_theta2 +
                       sin_theta1 * sin_theta2 * cos_phi1_minus_phi2;
-        // the following uses cos(\pi-x) = -cos(x)
+        // The following uses cos(pi-x) = -cos(x)
         Spectrum F = (1.f - sqr(g)) /
                      pow((1.f + sqr(g) + 2.f * g * cos_g), 1.5f);
 
+        // The 1/pi factor accounts for the fact that the formula in the paper
+        // gives the BRF expression, not the BRDF
         Spectrum value =
             rho_0 *
             (pow(cos_theta1 * cos_theta2 * (cos_theta1 + cos_theta2), k - 1.f) *
-                 F * (1.f + (1.f - rho_c) / (1 + G)));
+                 F * (1.f + (1.f - rho_c) / (1 + G))) * math::InvPi<Float>;
 
         return value;
     }

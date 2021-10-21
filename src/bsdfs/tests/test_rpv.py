@@ -52,14 +52,16 @@ def rpv_reference(rho_0, rho_0_hotspot, g, k,
     G = ek.sqrt(tan_i * tan_i + tan_o * tan_o - 2. * tan_i * tan_o * cosphi)
     K3 = 1. + (1. - rho_0_hotspot) / (1. + G)
 
-    return (K1 * Fg * K3 * rho_0 * ek.abs(uo))
+    # The 1/pi factor accounts for the fact that the formula in the paper gives
+    # the BRF expression, not the BRDF
+    return (K1 * Fg * K3 * rho_0 * ek.abs(uo) / np.pi)
 
 
 @pytest.mark.parametrize("rho_0", [0.1, 0.497, 0.004])
 @pytest.mark.parametrize("k", [0.543, 0.851, 0.634])
 @pytest.mark.parametrize("g", [-0.29, 0.086, 0.2])
 def test_eval(variant_scalar_rgb, rho_0, k, g):
-    """Test the eval method of the RPV plugin, comparing to a reference 
+    """Test the eval method of the RPV plugin, comparing to a reference
     implementation."""
 
     from mitsuba.core.xml import load_dict
