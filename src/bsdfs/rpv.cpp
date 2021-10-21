@@ -13,7 +13,7 @@ NAMESPACE_BEGIN(mitsuba)
 
 .. _bsdf-rpv:
 
-Rahman Pinty Verstraete reflection model (:monosp:`RPV`)
+Rahman Pinty Verstraete reflection model (:monosp:`rpv`)
 --------------------------------------------------------
 
 .. pluginparameters::
@@ -40,8 +40,8 @@ information, which is then mapped onto the shape based on its UV
 parameterization. When no parameters are specified, the model uses the default
 values of :math:`\rho_0 = 0.1`, :math:`k = 0.1` and :math:`g = 0.0`
 
-This plugin also supports the most common extension to four parameters, namely the
-:math:`\rho_c` extension, as used in :cite:`Widlowski2006Rayspread`.
+This plugin also supports the most common extension to four parameters, namely
+the :math:`\rho_c` extension, as used in :cite:`Widlowski2006Rayspread`.
 
 For the fundamental formulae defining the RPV model please refer to the Eradiate
 Scientific Handbook.
@@ -70,9 +70,9 @@ public:
     MTS_IMPORT_TYPES(Texture)
 
     RPV(const Properties &props) : Base(props) {
-        m_rho_0  = props.texture<Texture>("rho_0", 0.1f);
-        m_g = props.texture<Texture>("g", 0.f);
-        m_k      = props.texture<Texture>("k", 0.1f);
+        m_rho_0 = props.texture<Texture>("rho_0", 0.1f);
+        m_g     = props.texture<Texture>("g", 0.f);
+        m_k     = props.texture<Texture>("k", 0.1f);
         if (props.has_property("rho_c")) {
             m_rho_c = props.texture<Texture>("rho_c", 0.1f);
         } else {
@@ -106,10 +106,10 @@ public:
 
     Spectrum eval_rpv(const SurfaceInteraction3f &si, const Vector3f &wo,
                       Mask active) const {
-        Spectrum rho_0  = m_rho_0->eval(si, active);
-        Spectrum rho_c  = m_rho_c->eval(si, active);
-        Spectrum g      = m_g->eval(si, active);
-        Spectrum k      = m_k->eval(si, active);
+        Spectrum rho_0 = m_rho_0->eval(si, active);
+        Spectrum rho_c = m_rho_c->eval(si, active);
+        Spectrum g     = m_g->eval(si, active);
+        Spectrum k     = m_k->eval(si, active);
 
         auto [sin_phi1, cos_phi1] = Frame3f::sincos_phi(si.wi);
         auto [sin_phi2, cos_phi2] = Frame3f::sincos_phi(wo);

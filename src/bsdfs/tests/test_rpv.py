@@ -54,7 +54,8 @@ def rpv_reference(rho_0, rho_0_hotspot, g, k,
 
     # The 1/pi factor accounts for the fact that the formula in the paper gives
     # the BRF expression, not the BRDF
-    return (K1 * Fg * K3 * rho_0 * np.abs(uo) / np.pi)
+    return K1 * Fg * K3 * rho_0 * np.abs(uo) / np.pi
+
 
 def angles_to_directions(theta, phi):
     from mitsuba.core import Vector3f
@@ -62,6 +63,7 @@ def angles_to_directions(theta, phi):
     return Vector3f(np.sin(theta) * np.cos(phi),
                     np.sin(theta) * np.sin(phi),
                     np.cos(theta))
+
 
 def eval_bsdf(bsdf, wi, wo):
     from mitsuba.render import BSDFContext, SurfaceInteraction3f
