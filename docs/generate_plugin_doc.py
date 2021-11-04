@@ -36,6 +36,9 @@ BSDF_ORDERING = ['diffuse',
                  'null',
                  'polarizer',
                  'retarder',
+                 'circular',
+                 'measured_polarized',
+                 'pplastic',
                  'bilambertian',
                  'rpv']
 
