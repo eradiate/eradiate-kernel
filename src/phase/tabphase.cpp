@@ -9,8 +9,8 @@ NAMESPACE_BEGIN(mitsuba)
 
 .. _phase-tabphase:
 
-Tabulated table phase function (:monosp:`tabphase`)
----------------------------------------------------
+Tabulated phase function (:monosp:`tabphase`)
+---------------------------------------------
 
 .. pluginparameters::
 
@@ -20,14 +20,16 @@ Tabulated table phase function (:monosp:`tabphase`)
      cosine of the scattering angle.
 
 This plugin implements a generic phase function model for isotropic media
-parametrised by a lookup  table giving values of the phase function as a
+parametrised by a lookup table giving values of the phase function as a
 function of the cosine of the scattering angle.
 
 .. admonition:: Notes
 
    * The scattering angle is here defined as the dot product of the
-     incoming and outgoing directions, where the incoming direction points
-     *toward* the interaction point.
+     incoming and outgoing directions, where the incoming, resp. outgoing
+     direction points *toward*, resp. *outward* the interaction point.
+   * From this follows that :math:`\cos \theta = 1` corresponds to forward
+     scattering.
    * Lookup table points are regularly spaced between -1 and 1.
    * Phase function values are automatically normalized.
 */
@@ -74,12 +76,12 @@ public:
         Float sin_theta = enoki::safe_sqrt(1.0f - cos_theta * cos_theta);
         auto [sin_phi, cos_phi] =
             enoki::sincos(2.f * math::Pi<ScalarFloat> * sample2.y());
-        auto wo = Vector3f(sin_theta * cos_phi, sin_theta * sin_phi, cos_theta);
-        wo      = -mi.to_world(wo);
+        Vector3f wo{ sin_theta * cos_phi, sin_theta * sin_phi, cos_theta };
+        wo        = -mi.to_world(wo);
         Float pdf = m_distr.eval_pdf_normalized(-cos_theta, active) *
                     math::InvTwoPi<ScalarFloat>;
 
-        return std::make_pair(wo, pdf);
+        return { wo, pdf };
     }
 
     Float eval(const PhaseFunctionContext & /* ctx */,
@@ -96,6 +98,10 @@ public:
         callback->put_parameter("values", m_distr.pdf());
     }
 
+    void parameters_changed(const std::vector<std::string> & /*keys*/) override {
+        m_distr.update();
+    }
+
     std::string to_string() const override {
         std::ostringstream oss;
         oss << "TabulatedPhaseFunction[" << std::endl
@@ -110,5 +116,5 @@ private:
 };
 
 MTS_IMPLEMENT_CLASS_VARIANT(TabulatedPhaseFunction, PhaseFunction)
-MTS_EXPORT_PLUGIN(TabulatedPhaseFunction, "Lookup table-based phase function")
+MTS_EXPORT_PLUGIN(TabulatedPhaseFunction, "Tabulated phase function")
 NAMESPACE_END(mitsuba)
