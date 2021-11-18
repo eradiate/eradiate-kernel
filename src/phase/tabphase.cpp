@@ -77,7 +77,7 @@ public:
         auto [sin_phi, cos_phi] =
             enoki::sincos(2.f * math::Pi<ScalarFloat> * sample2.y());
         Vector3f wo{ sin_theta * cos_phi, sin_theta * sin_phi, cos_theta };
-        wo        = -mi.to_world(wo);
+        wo = mi.to_world(wo);
         Float pdf = m_distr.eval_pdf_normalized(-cos_theta, active) *
                     math::InvTwoPi<ScalarFloat>;
 
