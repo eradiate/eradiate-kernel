@@ -112,3 +112,64 @@ def test_traverse(variant_scalar_rgb):
     mi.wi = np.array([0, 0, -1])
     wo = [0, 0, 1]
     assert ek.allclose(phase.eval(ctx, mi, wo), InvTwoPi * 1.5 / ref_integral)
+
+
+def test_compare(variant_scalar_rgb):
+    # Compare with another phase function to check for frame orientation issues
+    from mitsuba.core import Vector3f
+    from mitsuba.core.xml import load_dict
+    from mitsuba.render import PhaseFunctionContext, MediumInteraction3f
+
+    # Evaluate Henyey-Greenstein phase function and generate the lookup table
+    wi = np.array([[0, 0, -1]])
+    thetas = np.linspace(-np.pi / 2, np.pi / 2, 201)
+    phis = np.atleast_1d(0.)
+    wos = np.array(
+        [
+            (
+                np.sin(theta) * np.cos(phi),
+                np.sin(theta) * np.sin(phi),
+                np.cos(theta),
+            )
+            for theta, phi in product(thetas, phis)
+        ]
+    )
+
+    hg = load_dict({"type": "hg", "g": 0.2})
+    wo = Vector3f(wos)
+    print(wo)
+    ctx = PhaseFunctionContext(None)
+    mi = MediumInteraction3f()
+    tab_values = hg.eval(ctx, mi, wo)
+    print(tab_values)
+    for i, wo in enumerate(list(wos)):
+        tab_eval[i] = tab.eval(ctx, mi, wo)
+
+
+
+    # # Generate directions
+    # wi = np.array([[0, 0, -1]])
+    # thetas = np.linspace(0, np.pi / 2, 16)
+    # phis = np.linspace(0, np.pi, 16)
+    # wos = np.array(
+    #     [
+    #         (
+    #             np.sin(theta) * np.cos(phi),
+    #             np.sin(theta) * np.sin(phi),
+    #             np.cos(theta),
+    #         )
+    #         for theta, phi in product(thetas, phis)
+    #     ]
+    # )
+
+
+    # tab = load_dict({"type": "tabphase", "values": ", ".join([str(x) for x in ref_y])})
+    # ctx = PhaseFunctionContext(None)
+    # mi = MediumInteraction3f()
+    # mi.wi = wi.squeeze()
+    # tab_eval = np.zeros_like(ref_eval)
+    # for i, wo in enumerate(wos):
+    #     tab_eval[i] = tab.eval(ctx, mi, wo)
+
+    # # Compare reference and plugin outputs
+    # assert np.allclose(ref_eval, tab_eval)
